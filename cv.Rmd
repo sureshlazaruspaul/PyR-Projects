@@ -1,0 +1,147 @@
+---
+title: ""
+author: ""
+date: ""
+output: pdf_document
+urlcolor: blue
+---
+
+Suresh Paul (he/him/his)
+============
+
+Email: [spaul@bw.edu](mailto:spaul@bw.edu)\
+Twitter: [@sureshlp1](https://twitter.com/sureshlp1)\
+Tel: +1.440.815.2275\
+Github: [github.com/sureshlazaruspaul](https://github.com/sureshlazaruspaul)\
+LinkedIn: [linkedin.com/in/sureshlpaul](https://www.linkedin.com/in/sureshlpaul)\
+Office address: Suite 142, 4597 Great Northern Blvd, North Olmsted, OH 44070\
+BW address: 211 Kamm Hall, Baldwin Wallace University, 275 Eastland Rd, Berea, OH 44017\
+
+
+
+Experience
+----------
+
+
+### Format 1:
+
++-------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
+| Dates             | Affiliation                                                                                                                                  |
++===================+==============================================================================================================================================+
+| 2022-present      | **Lecturer II**, Baldwin Wallace University, Berea, OH.                                                                                      |
++-------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
+|                   | - teach MBA (R & Python), UG (Microeonomics)                                                                                                 |
++-------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
+| 2021-present      | **Founder & Sr. Data Scientist**, Algorithm Basics LLC, OH.                                                                                  |
++-------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
+|                   | - provide statistical inferential analysis to think-tanks, academicians, policymakers, and researchers in the healthcare and aging economics.|
+|                   | - collect and curate proprietory data in various fields.                                                                                     |
+|                   | - design statistical causal analysis to economic research and publish in academic journals.                                                  |
+|                   | - conduct data support to B2B, B2C, and Web3 organizations.                                                                                  |
++-------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
+| 2009-present      | **Data Consultant**, Precision Compounds Inc., ON, Canada.                                                                                   |
++-------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
+|                   | - provide statistical inferential analysis and data support to predict market trends.                                                        |
++-------------------+----------------------------------------------------------------------------------------------------------------------------------------------+
+
+
+### Format 2:
+
+| Dates       | Affiliation                                                                             |
+|:------------|:----------------------------------------------------------------------------------------|
+|2014-2021    | **Partner**, Management Research & Securities Trading Co. Inc, NV.                      |
+|             |                                                                                         |
+|2008-2009    | **Adjunct Professor of Finance**, Binghamton University, NY.                            |
+|             |                                                                                         |
+|2004-2007    | **Summer Instructor**, Continuing Education & Outreach, Binghamton University, NY.      |
+
+
+### Format 3:
+
+2003-2009
+:   Research Assistant, School of Business, Binghamton University, NY.
+
+2000-2001
+:   Executive Officer, Winvare Solutions Pvt. Ltd., India.
+
+
+*** 
+
+
+Education
+---------
+
+2003-2009
+:   **PhD, Finance** (ABD/CPhil); Binghamton University, NY.
+
+    *Specialization*: Corporate finance, Microeconomics, and Econometrics\
+    *Teaching*: Fixed Income (MBA), Financial Management (UG), and Investments (UG)
+
+
+2001-2003
+:   **MS Industrial Engineering**; University of Cincinnati, OH.
+
+    *Specialization*: Robotic and intelligent autonomous systems\
+    *Thesis*: [Curvilinear Traverse Generation Module for an AGV](https://bit.ly/2UiyX33).\
+    *Team membe*r: [Center for Robotics Research](https://ceas.uc.edu/research/centers-labs/center-for-robotics-research.html).\
+    *President*: Graduate Students Governance Association.
+
+
+1996-2000
+:   **BE Mechanical Engineering**; C.E.G., Anna University, India.
+
+
+*** 
+
+
+Technical Experience
+--------------------
+
+Principal Author
+:   Economic value of agro waste in developing countries In:
+    Byproducts from Agricultural and Fisheries: Adding Value 
+    for Food, Feed, Pharma and Fuels. In B. K. Simpson, 
+    E. M. Kwofie & A. N. Aryee (Eds.), (Chap. 25, Vol. 2, 
+    pp. 581–595). John Wiley & Sons, NJ.\
+    doi: [10.1002/9781119383956.ch25](https://dx.doi.org/10.1002/9781119383956.ch25)
+
+
+
+Principal Author
+:   Boys and Girls Have Different Friends: Gender Differences 
+    in CEO Network and Wage Premiums. SSRN Women & Work eJournal 2017.\
+    doi: [10.2139/ssrn.2850666](https://dx.doi.org/10.2139/ssrn.2850666)
+
+
+
+Statistical & Data Analysis
+:   Provided statistical programming in over 10 academic working papers and conference presentations, including
+
+    * The Effect of Electrification on Childhood Education in India. 
+      American Economic Association, Philadelphia, PA, USA.,
+      with Sahni, H. and Sinha, E. (2018)
+    * Boys and Girls have Different Friends: Gender Differences in CEO 
+      Network and Wage Premiums. Financial Management Association, Orlando, FL, USA.,
+      with Sahni, H. (2015)
+    * Sociability Capital and the Gender Wage Gap. 
+      Western Economic Association, Denver, CO, USA.,
+      with Sahni, H. (2014)
+    * Do Shareholders Agree With ISS? Evidence from ISS Vote Recommendations.
+      Financial Management Association, Reno, NV, USA. (2009)
+    * Women in Top Management and Job Self Selection. 
+      Financial Management Association, Reno, NV, USA.,
+      with Sahni, H. (2009)
+
+
+
+Programming Languages
+:   R, Python, Stata, SAS, Git, Perl, LATEX.
+
+
+
+Human Languages
+:   English, Tamil (world's oldest language)
+
+
+*** 
+

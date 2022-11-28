@@ -1,0 +1,1636 @@
+---
+title: "CAPM, Three-Factor Model, and Industry Cost of Equity"
+author: "Suresh L. Paul"
+date: "`r Sys.Date()`"
+output: 
+  pdf_document:
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Research question
+
+
+*Explain the research question. Be concise and explain what your project is about.*
+
+
+
+
+In this project, I estimate the Capital Asset Pricing Model (CAPM) and the Fama-French Three Factor Model coefficients using CRSP monthly stock return data between the years 1990 and 2018. 
+
+The CAPM equation is given as follows,
+$$
+E(R_i) = \alpha + \beta(E(R_M) - r_f) + \epsilon
+$$
+and the Fama-French Three Factor Model equation is given as follows,
+$$
+E(R_i) = \alpha + \beta_i(E(R_M) - r_f) + \gamma_i E(R_{SMB}) + \theta_i E(R_{HML}) + \epsilon
+$$
+
+
+
+
+Also, list all your *R* libraries and *R* verbs/functions that you plan to use and how? Also include the version of *R* and *RStudio* used in your analysis.
+
+
+***
+
+
+
+# Data analysis
+
+
+
+The final analysis data is compiled from 6 different datasets - the monthly individual stock return file (*msf.csv*), the header file containing key firm-level characteristics such as SIC codes(*msfhdr.csv*), market stock return file containing all trading dates since the advent of stock trading (*msp500.csv*), the list of firms in the S&P 500 index (*msp500list.csv*), Fama-French 48 industry classification (*ffind.csv*), and finally the three factors data (*3factors.csv*).
+
+
+
+## Exploratory data analysis
+
+
+
+This subsection documents the initial diagnostic evaluation of all datasets.
+
+
+
+### Loading Libraries
+
+
+First, I start with installing and loading all required *R* libraries. They include,
+
+-   *data.table()*
+-   *tidyverse()*, which includes *ggplot2()* and *dplyr()*
+-   *lubridate()*
+-   *sqldf()*, which is used for many-to-many merge
+-   *broom()*
+-   *tidyquant()*
+
+
+Also, the path to datasets, namely *gitpath* and *dirpath*, are initialized.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# load all libraries ...
+
+library("data.table")
+library("tidyverse")
+library("lubridate")
+library("sqldf")
+library("broom")
+library("tidyquant")
+library("plotly")
+
+
+#-------------------------------------------------------------------------------
+# initialize path to files ...
+#-------------------------------------------------------------------------------
+
+# Github path to data
+gitpath <- "https://raw.githubusercontent.com/sureshlazaruspaul/"
+
+# Local path to files
+dirpath <- "C:/data/stock_data/"
+```
+
+
+***
+
+
+
+### Importing strategy and Descriptive Summary
+
+
+
+All datasets are imported using the *fread()* function from the *data.table* library package. Of the six imported datasets, four (i.e., msf.csv, msfhdr.csv, msp500.csv, and msp500list.csv) are locally available whereas the remaining two (i.e., ffind.csv and 3factors.csv) is imported from online sources.
+
+
+#### Stock Header File (msfhdr.csv)
+
+##### Import
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# stock data header file
+# - contains all firms
+# - contains industry codes, firm name, and identifiers
+# - contains beginning and ending date of trading
+# - create a column of ones(used for merging later on)
+#-------------------------------------------------------------------------------
+
+msfhdr <- fread(paste0(dirpath, "msfhdr.csv")) %>%
+  select(c("permno", "hsiccd",
+           "hcomnam", "begret", "endret")) %>%
+  mutate(
+    begret = as.Date(begret, "%d%b%Y"),
+    endret = as.Date(endret, "%d%b%Y"),
+    dummy = 1
+  )
+```
+
+
+##### Describe
+
+
+-   *head()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(msfhdr)
+```
+
+-   *tail()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(msfhdr)
+```
+
+-   *glimpse()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(msfhdr)
+```
+
+-   *str()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(msfhdr)
+```
+
+-   *class()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(msfhdr)
+```
+
+#### Market Stock Return File (msp500.csv)
+
+##### Import
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# monthly market return file ...
+# - contains returns of S&P 500 firms (equally-weighted, value-weighted)
+#-------------------------------------------------------------------------------
+
+msp500 <- fread(paste0(dirpath, "msp500.csv")) %>%
+  mutate(
+    date = as.Date(caldt, "%d%b%Y")
+  )
+
+# get all trading dates from market return files... 
+dates <- msp500 %>% select(date) %>%
+  mutate(
+    dummy = 1
+  )
+```
+
+##### Describe
+
+-   *head()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(msp500)
+```
+
+-   *tail()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(msp500)
+```
+
+-   *glimpse()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(msp500)
+```
+
+-   *str()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(msp500)
+```
+
+-   *class()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(msp500)
+```
+
+#### List of S&P 500 firms (msp500list.csv)
+
+##### Import
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# get s&p 500 list ...
+# - identifes which firms are in S&P
+#-------------------------------------------------------------------------------
+
+msp500list <- fread(paste0(dirpath, "msp500list.csv")) %>%
+  mutate(
+    begdt = as.Date(start, "%d%b%Y"),
+    enddt = as.Date(ending, "%d%b%Y")
+  ) %>%
+  select(
+    -start, -ending
+  )
+```
+
+##### Describe
+
+-   *head()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(msp500list)
+```
+
+-   *tail()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(msp500list)
+```
+
+-   *glimpse()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(msp500list)
+```
+
+-   *str()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(msp500list)
+```
+
+-   *class()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(msp500list)
+```
+
+#### Monthly Stock Return File (msf.csv)
+
+##### Import
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# get monthly stock returns ...
+# - gives stock returns (monthly) of all firms
+#-------------------------------------------------------------------------------
+
+msf <- fread(paste0(dirpath, "msf.csv")) %>%
+  mutate(
+    date = as.Date(date, "%d%b%Y")
+  ) %>%
+  select(
+    permno, date, ret
+  )
+
+summary(msf) # diagnose return file
+
+msf <- msf %>%
+  filter(
+    !is.na(ret) & ret > -0.99
+  )
+
+summary(msf) # diagnose return file
+```
+
+##### Describe
+
+-   *head()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(msf)
+```
+
+-   *tail()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(msf)
+```
+
+-   *glimpse()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(msf)
+```
+
+-   *str()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(msf)
+```
+
+-   *class()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(msf)
+```
+
+##### Descriptive plots
+
+-   histogram of monthly returns (ret)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- msf %>%
+  filter(
+    !is.na(ret)
+  ) %>%
+  ggplot() +
+  theme_classic() +
+  xlim(-1,1) +
+  labs(
+    title = "Distribution of Monthly Returns",
+    subtitle = "Sample: S&P 500 firms only",
+    caption = paste("From", min(msf$date), 
+                    "to", max(msf$date)),
+    x = "Monthly Returns",
+    y = "Frequency"
+  )
+
+# plot
+h1 <- canvas +
+  geom_histogram(
+    aes(
+      x=ret
+    ),
+    bins = 100,
+    fill = "red"
+  )
+
+h2 <- h1 +
+  geom_histogram(
+    aes(
+      x=ret
+    ),
+    bins = 250,
+    fill = "green"
+  )
+
+h2 +
+  geom_histogram(
+    aes(
+      x=ret
+    ),
+    bins = 1000,
+    fill = "blue"
+  )
+```
+
+
+-   boxplot of monthly returns (ret)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvasa <- msf %>%
+  ggplot() + 
+  theme_light() +
+  ylim(-100, 100) +
+  labs(
+    title = "Distribution of Monthly Returns",
+    subtitle = "Sample: S&P 500 firms only",
+    caption = paste("From", min(msf$date), 
+                    "to", max(msf$date)),
+    x = "",
+    y = "Monthly Returns (%)"
+  )
+
+canvasa + 
+  geom_boxplot(aes(y = ret*100)) + 
+  scale_x_discrete() +
+  coord_flip()
+```
+
+#### Fama-French 48 Industry Classification (ffind.csv)
+
+##### Import
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# Industry classification
+#-------------------------------------------------------------------------------
+# http://mba.tuck.dartmouth.edu/pages/faculty/ken.french/Data_Library
+#-------------------------------------------------------------------------------
+
+ffind <- fread(paste0(gitpath,
+                      "fama-french-ind-class/main/ffind.csv")) %>%
+  filter(ind_def == 48) %>%
+  rename(ffclass = class) %>%
+  select(ffclass, sic_start, sic_end)
+```
+
+##### Describe
+
+-   *head()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(ffind)
+```
+
+-   *tail()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(ffind)
+```
+
+-   *glimpse()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(ffind)
+```
+
+-   *str()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(ffind)
+```
+
+-   *class()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(ffind)
+```
+
+#### Three factors data (3factors.csv)
+
+##### Import
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# get three-factors for the 3-factor-model 
+#-------------------------------------------------------------------------------
+
+three_factor <-
+  fread(paste0(gitpath, 
+               "fama-french-ind-class/main/3factors.csv")) %>%
+  mutate(
+    year = round(date/100, digits = 0),
+    month = date - (year*100),
+    mktpre = mktpre/100,
+    smb = smb/100,
+    hml = hml/100,
+    rf = rf/100
+  ) %>% select(-date)
+```
+
+##### Describe
+
+-   *head()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(three_factor)
+```
+
+-   *tail()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(three_factor)
+```
+
+-   *glimpse()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(three_factor)
+```
+
+-   *str()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(three_factor)
+```
+
+-   *class()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(three_factor)
+```
+
+##### Descriptive plots
+
+-   histogram of market risk premium (mktpre)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas1 <- three_factor %>%
+  filter(
+    !is.na(mktpre)
+  ) %>%
+  ggplot() +
+  theme_classic() +
+  xlim(-1,1) +
+  labs(
+    title = "Distribution of Market Risk Premium",
+    subtitle = "Source: Fame-French",
+    caption = paste("From", min(three_factor$year), 
+                    "to", max(three_factor$year)),
+    x = "Market Risk Premium",
+    y = "Frequency"
+  )
+
+# plot
+h1 <- canvas1 +
+  geom_histogram(
+    aes(
+      x=mktpre
+    ),
+    bins = 100,
+    fill = "red"
+  )
+
+h2 <- h1 +
+  geom_histogram(
+    aes(
+      x=mktpre
+    ),
+    bins = 250,
+    fill = "green",
+    alpha = 0.5
+  )
+
+h2 +
+  geom_histogram(
+    aes(
+      x=mktpre
+    ),
+    bins = 1000,
+    fill = "blue",
+    alpha = 0.75
+  )
+```
+
+-   boxplot of market risk premium (mktpre)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas1a <- three_factor %>%
+  ggplot() + 
+  theme_light() +
+  ylim(-100, 100) +
+  labs(
+    title = "Distribution of Market Risk Premium",
+    subtitle = "Source: Fame-French",
+    caption = paste("From", min(three_factor$year), 
+                    "to", max(three_factor$year)),
+    x = "",
+    y = "Market Risk Premium (%)"
+  )
+
+canvas1a + 
+  geom_boxplot(aes(y = mktpre*100)) + 
+  scale_x_discrete() +
+  coord_flip()
+```
+
+-   histogram of size factor (smb)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas2 <- three_factor %>%
+  filter(
+    !is.na(smb)
+  ) %>%
+  ggplot() +
+  theme_classic() +
+  xlim(-1,1) +
+  labs(
+    title = "Distribution of Size Factor",
+    subtitle = "Source: Fame-French",
+    caption = paste("From", min(three_factor$year), 
+                    "to", max(three_factor$year)),
+    x = "SMB",
+    y = "Frequency"
+  )
+
+# plot
+h1 <- canvas2 +
+  geom_histogram(
+    aes(
+      x=smb
+    ),
+    bins = 100,
+    fill = "red"
+  )
+
+h2 <- h1 +
+  geom_histogram(
+    aes(
+      x=smb
+    ),
+    bins = 250,
+    fill = "green",
+    alpha = 0.5
+  )
+
+h2 +
+  geom_histogram(
+    aes(
+      x=smb
+    ),
+    bins = 1000,
+    fill = "blue",
+    alpha = 0.75
+  )
+```
+
+-   boxplot of size factor (smb)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas1a <- three_factor %>%
+  ggplot() + 
+  theme_light() +
+  ylim(-100, 100) +
+  labs(
+    title = "Distribution of Size Factor",
+    subtitle = "Source: Fame-French",
+    caption = paste("From", min(three_factor$year), 
+                    "to", max(three_factor$year)),
+    x = "",
+    y = "SMB (%)"
+  )
+
+canvas1a + 
+  geom_boxplot(aes(y = smb*100)) + 
+  scale_x_discrete() +
+  coord_flip()
+```
+
+-   histogram of book-to-market factor (hml)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas2 <- three_factor %>%
+  filter(
+    !is.na(hml)
+  ) %>%
+  ggplot() +
+  theme_classic() +
+  xlim(-1,1) +
+  labs(
+    title = "Distribution of B/M Factor",
+    subtitle = "Source: Fame-French",
+    caption = paste("From", min(three_factor$year), 
+                    "to", max(three_factor$year)),
+    x = "HML",
+    y = "Frequency"
+  )
+
+# plot
+h1 <- canvas2 +
+  geom_histogram(
+    aes(
+      x=hml
+    ),
+    bins = 100,
+    fill = "red"
+  )
+
+h2 <- h1 +
+  geom_histogram(
+    aes(
+      x=hml
+    ),
+    bins = 250,
+    fill = "green",
+    alpha = 0.5
+  )
+
+h2 +
+  geom_histogram(
+    aes(
+      x=hml
+    ),
+    bins = 1000,
+    fill = "blue",
+    alpha = 0.75
+  )
+```
+
+-   boxplot of B/M factor (hml)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas1a <- three_factor %>%
+  ggplot() + 
+  theme_light() +
+  ylim(-100, 100) +
+  labs(
+    title = "Distribution of B/M Factor",
+    subtitle = "Source: Fame-French",
+    caption = paste("From", min(three_factor$year), 
+                    "to", max(three_factor$year)),
+    x = "",
+    y = "HML (%)"
+  )
+
+canvas1a + 
+  geom_boxplot(aes(y = hml*100)) + 
+  scale_x_discrete() +
+  coord_flip()
+```
+
+***
+
+#### Variables and observations
+
+From the *glimpse()* function used in the previous section, we can manually ascertain how many variables and observations were there in each dataset. Alternately, the number of observations can be obtained using the *nrow()* function and the number of variables satisfying each criteria can be obtained using a combination of *length()*, *names()*, and *select_if()* functions.
+
+
+-   Stock Header File (msfhdr.csv)
+    -   number of variables: `r length(names(msfhdr))`
+        -   number of numeric variables: `r length(names(dplyr::select_if(msfhdr,is.numeric)))`
+            -   number of integer variables: `r length(names(dplyr::select_if(msfhdr,is.integer)))`
+            -   number of double/float variables: `r length(names(dplyr::select_if(msfhdr,is.double)))`
+        -   number of character variables: `r length(names(dplyr::select_if(msfhdr,is.character)))`
+        -   number of factor variables: `r length(names(dplyr::select_if(msfhdr,is.factor)))`
+            -   number of factors with levels: 0
+        -   number of date variables: `r length(names(dplyr::select_if(msfhdr,is.Date)))`
+    -   number of observations:  `r nrow(msfhdr)`
+
+-   Market Stock Return File (msp500.csv)
+    -   number of variables: `r length(names(msp500))`
+        -   number of numeric variables: `r length(names(dplyr::select_if(msp500,is.numeric)))`
+            -   number of integer variables: `r length(names(dplyr::select_if(msp500,is.integer)))`
+            -   number of double/float variables: `r length(names(dplyr::select_if(msp500,is.double)))`
+        -   number of character variables: `r length(names(dplyr::select_if(msp500,is.character)))`
+        -   number of factor variables: `r length(names(dplyr::select_if(msp500,is.factor)))`
+            -   number of factors with levels: 0
+        -   number of date variables: `r length(names(dplyr::select_if(msp500,is.Date)))`
+    -   number of observations: `r nrow(msp500)`
+
+-   List of S&P 500 firms (msp500list.csv)
+    -   number of variables: `r length(names(msp500list))`
+        -   number of numeric variables: `r length(names(dplyr::select_if(msp500list,is.numeric)))`
+            -   number of integer variables: `r length(names(dplyr::select_if(msp500list,is.integer)))`
+            -   number of double/float variables: `r length(names(dplyr::select_if(msp500list,is.double)))`
+        -   number of character variables: `r length(names(dplyr::select_if(msp500list,is.character)))`
+        -   number of factor variables: `r length(names(dplyr::select_if(msp500list,is.factor)))`
+            -   number of factors with levels: 0
+        -   number of date variables: `r length(names(dplyr::select_if(msp500list,is.Date)))`
+    -   number of observations: `r nrow(msp500list)`
+
+-   Monthly Stock Return File (msf.csv)
+    -   number of variables: `r length(names(msf))`
+        -   number of numeric variables: `r length(names(dplyr::select_if(msf,is.numeric)))`
+            -   number of integer variables: `r length(names(dplyr::select_if(msf,is.integer)))`
+            -   number of double/float variables: `r length(names(dplyr::select_if(msf,is.double)))`
+        -   number of character variables: `r length(names(dplyr::select_if(msf,is.character)))`
+        -   number of factor variables: `r length(names(dplyr::select_if(msf,is.factor)))`
+            -   number of factors with levels: 0
+        -   number of date variables: `r length(names(dplyr::select_if(msf,is.Date)))`
+    -   number of observations: `r nrow(msf)`
+
+-   Fama-French Industry Classification (ffind.csv)
+    -   number of variables: `r length(names(ffind))`
+        -   number of numeric variables: `r length(names(dplyr::select_if(ffind,is.numeric)))`
+            -   number of integer variables: `r length(names(dplyr::select_if(ffind,is.integer)))`
+            -   number of double/float variables: `r length(names(dplyr::select_if(ffind,is.double)))`
+        -   number of character variables: `r length(names(dplyr::select_if(ffind,is.character)))`
+        -   number of factor variables: `r length(names(dplyr::select_if(ffind,is.factor)))`
+            -   number of factors with levels: 0
+        -   number of date variables: `r length(names(dplyr::select_if(ffind,is.Date)))`
+    -   number of observations: `r nrow(ffind)`
+
+-   Three factors data (3factors.csv)
+    -   number of variables: `r length(names(three_factor))`
+        -   number of numeric variables: `r length(names(dplyr::select_if(three_factor,is.numeric)))`
+            -   number of integer variables: `r length(names(dplyr::select_if(three_factor,is.integer)))`
+            -   number of double/float variables: `r length(names(dplyr::select_if(three_factor,is.double)))`
+        -   number of character variables: `r length(names(dplyr::select_if(three_factor,is.character)))`
+        -   number of factor variables: `r length(names(dplyr::select_if(three_factor,is.factor)))`
+            -   number of factors with levels: 0
+        -   number of date variables: `r length(names(dplyr::select_if(three_factor,is.Date)))`
+    -   number of observations: `r nrow(three_factor)`
+
+
+#### Descriptive statistics
+
+Here, the *summary()* and *quantile()* functions are used to obtain statistical summaries on each study variable.
+
+
+##### Stock Header File (msfhdr.csv)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+summary(msfhdr)
+```
+
+
+##### Market Stock Return File (msp500.csv)
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+summary(msp500)
+```
+
+##### List of S&P 500 firms (msp500list.csv)
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+summary(msp500list)
+```
+
+##### Monthly Stock Return File (msf.csv)
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+summary(msf$ret)
+quantile(msf$ret, probs = c(0.01, 0.05, 0.10, 0.25, 0.50, 
+                            0.75, 0.90, 0.95, 0.99), na.rm = FALSE)
+```
+
+##### Fama-French 5 digit Industry Classification (ffind.csv)
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+summary(ffind)
+```
+
+##### Three factors data (3factors.csv)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+summary(three_factor$mktpre)
+quantile(three_factor$mktpre, probs = c(0.01, 0.05, 0.10, 0.25, 0.50, 
+                            0.75, 0.90, 0.95, 0.99), na.rm = FALSE)
+
+summary(three_factor$smb)
+quantile(three_factor$smb, probs = c(0.01, 0.05, 0.10, 0.25, 0.50, 
+                            0.75, 0.90, 0.95, 0.99), na.rm = FALSE)
+
+summary(three_factor$hml)
+quantile(three_factor$hml, probs = c(0.01, 0.05, 0.10, 0.25, 0.50, 
+                            0.75, 0.90, 0.95, 0.99), na.rm = FALSE)
+```
+
+### Treatment of missing variables
+
+The data on monthly returns has missing values. All missing values are replaced with zero returns.
+
+## Empirical data analysis
+
+This section details the main empirical analysis.
+
+### Merging, subsetting and filtering
+
+First, we start with the universe of all publicly traded firms in CRSP header file (*msfhdr*). To these firms, we merge with all possible trading dates obtained from market returns file (*msp500*). This merge is a many-to-many merge.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# for the full list of firms, get all possible trading dates ...
+#-------------------------------------------------------------------------------
+
+stock_data1 <- msfhdr %>%
+  # get unique firms
+  distinct() %>%
+  # get trading dates for each firm 
+  left_join( # merge dates ...
+    dates,
+    by = "dummy"
+  ) %>%
+  select(-dummy)
+
+summary(stock_data1) # diagnose file
+glimpse(stock_data1)
+```
+
+We join `r nrow(msfhdr)` unique firms with `r nrow(dates)` unique trading days to obtain `r nrow(stock_data1)` observations.
+
+</br>
+
+Second, we obtain monthly returns for all these firms on the respective trading days by merging with the monthly returns file (*msf*). This is a simple left merge. We, then, drop all observations outside starting trading date (*begret*, also known as IPO date) and ending trading date (*endret*, also known as Delisted/Defunct date) for each firm obtained from the header file.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# for all possible trading dates, see if there is returns ...
+#-------------------------------------------------------------------------------
+
+stock_data2 <- stock_data1 %>%
+  # get return data
+  left_join(
+    msf,
+    by = c("permno", "date")
+  ) %>%
+  # limit to trading trades
+  filter(
+    date >= begret & date <= endret
+  ) %>%
+  select(-begret, -endret)
+
+summary(stock_data2) # diagnose file
+
+#-------------------------------------------------------------------------------
+# Question? 
+# Return should be there, but missing. 
+# What to do with missing returns?
+#-------------------------------------------------------------------------------
+
+glimpse(stock_data2)
+```
+
+We start with `r nrow(stock_data1)` observations and end up with `r nrow(stock_data2)` observations after imposing data restrictions.
+
+</br>
+
+Third, we only keep S&P 500 firms. For this purpose, we merge with the file conatining the list of all S&P 500 firms (*msp500list*). This is a simple left merge. We, then, drop all observations outside starting S&P entry date (*begdt*) and ending S&P exit date (*enddt*) for each firm in our dataset.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# restrict firms to S&P 500 firms only ...
+# get s&p list data ...
+#-------------------------------------------------------------------------------
+
+stock_data3 <- stock_data2 %>%
+  # when was the firm in the s&p list?
+  left_join(
+    msp500list,
+    by = c("permno")
+  )  %>%
+  # restrict sample
+  filter(
+    # drop unmerged data (S&P 500 firms only)
+    !is.na(begdt) &
+      # keep only firms within date range
+      (date >= begdt & date <= enddt) &
+      # define a sample period, if any
+      between(date, as.Date("1990-01-01"), as.Date("2020-12-31"))
+  ) %>%
+  select(-begdt, -enddt) %>%
+  # what to do with missing returns? 
+  # replace with ZERO
+  mutate(
+    ret = ifelse(is.na(ret), 0, ret)
+  ) 
+
+summary(stock_data3) # diagnose file
+glimpse(stock_data3)
+```
+
+We start with `r nrow(stock_data2)` observations and end up with `r nrow(stock_data3)` observations after imposing data restrictions.
+
+</br>
+
+Fourth, we get the Fama-French 5 industry classification for each SIC code. For this purpose, we merge our dataset to the Fama-French Industry file (*ffind*). This is a SQL range merge, which only merges SIC (*hsiccd*) observations that fall in between a range of SIC values (*sic_start*, *sic_end*). Then, we also left merge with Fama-French three factors data (*three_factor*).
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# SQL merge - merge by range ...
+# - merge if firm's sic is between sic_start and sic_end values
+#-------------------------------------------------------------------------------
+
+final_data <- 
+  sqldf("select * 
+        from stock_data3 LEFT JOIN ffind on 
+        (stock_data3.hsiccd >= ffind.sic_start and 
+            stock_data3.hsiccd <= ffind.sic_end)",
+        stringsAsFactors = FALSE) %>% 
+  # drop missing ffclass ....
+  filter(
+    !is.na(ffclass)
+  ) %>%
+  # drop some variables ....
+  select(
+    -sic_start, -sic_end
+  ) %>%
+  # sort data ...
+  arrange(
+    ffclass, date, permno
+  ) %>%
+  # group by ...
+  group_by(
+    ffclass, date
+  ) %>%
+  # compute average industry returns ...
+  summarise(
+    indret = mean(ret)
+  ) %>%
+  mutate(
+    month = month(date),
+    year = year(date)
+  ) %>%
+  # merge 3-factors to stock_data
+  left_join(
+    three_factor,
+    by = c("year", "month")
+  ) %>%
+  select(
+    -year, -month
+  )
+
+rm("dates", "msfhdr", "msp500", "msf", 
+   "msp500list", "ffind", "three_factor")
+
+summary(final_data) # diagnose file
+glimpse(final_data)
+```
+
+We end up with `r nrow(final_data)` observations after imposing data restrictions.
+
+### Multivariate Analysis
+
+#### CAPM model estimates
+
+We estimate industry cost of equity using the Capital Asset Pricing Model (CAPM). We use the Fama-French 48 Industry classification and run 48 regressions to estimate coefficient of the Market factor. We then finally plot the estimates using *ggplot*.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# CAPM Estimates
+#-------------------------------------------------------------------------------
+
+capm_model <- 
+  final_data %>%
+  group_by(ffclass) %>%
+  group_modify(
+    ~ tidy(lm(indret ~ mktpre, data = .))
+  ) %>%
+  filter(
+    term %in% c("mktpre")
+  ) %>%
+  ggplot(
+    aes(
+      x = ffclass,
+      y = estimate
+    )
+  ) +
+  theme_tq_green() +
+  labs(
+    title = "CAPM Estimates for Market Risk Premium",
+    subtitle = "48 Industry Portfolios",
+    caption = paste("from", min(final_data$date), 
+                    "to", max(final_data$date)),
+    x = "Industry Classifications",
+    y = "Estimate"
+  ) +
+  geom_point(
+    shape=22, fill="red", color="darkred", size=2
+  ); capm_model
+```
+
+
+#### Three-factor model estimates
+
+We estimate industry cost of equity using the Fama-French 3 factor Model. We use the Fama-French 48 Industry classification and run 48 regressions to estimate coefficient of the Market factor. We then finally plot the estimates using *ggplot*.
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# Three-factor Model Estimates
+#-------------------------------------------------------------------------------
+
+ff3_model <- 
+  final_data %>%
+  group_by(ffclass) %>%
+  group_modify(
+    ~ tidy(lm(indret ~ mktpre +smb + hml, data = .))
+  ) %>%
+  filter(
+    !term %in% c("(Intercept)")
+  ) %>%
+  ggplot(
+    aes(
+      x = ffclass,
+      y = estimate,
+      group = term,
+      shape = term,
+      color = ffclass
+    )
+  ) +
+  theme_tq() +
+  labs(
+    title = "Three-factor Model Estimates",
+    subtitle = "48 Industry Portfolios",
+    caption = paste("from", min(final_data$date), 
+                    "to", max(final_data$date)),
+    x = "Industry Classifications",
+    y = "Estimate"
+  ) +
+  geom_point(
+    size=2
+  ); ff3_model
+```
+
+
+# Conclusion
+
+To summarise, describe your findings of your empirical analysis. Also, list the total number of *R* verbs that you have used in your study.
+
+# Full *R* code
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+library(data.table)
+library(tidyverse)
+library(lubridate)
+library(sqldf)
+library(broom)
+library(tidyquant)
+library(tidyr)
+
+#-------------------------------------------------------------------------------
+# path to files ...
+#-------------------------------------------------------------------------------
+
+# Github path to data
+gitpath <- "https://raw.githubusercontent.com/sureshlazaruspaul/"
+
+# Local path to files
+dirpath <- "C:/data/stock_data/"
+
+#-------------------------------------------------------------------------------
+# stock data header file
+# - contains all firms
+# - contains industry codes, firm name, and identifiers
+# - contains beginning and ending date of trading
+# - create a column of ones(used for merging later on)
+#-------------------------------------------------------------------------------
+
+msfhdr <- fread(paste0(dirpath, "msfhdr.csv")) %>%
+  select(c("permno", "hsiccd",
+           "hcomnam", "begret", "endret")) %>%
+  mutate(
+    begret = as.Date(begret, "%d%b%Y"),
+    endret = as.Date(endret, "%d%b%Y"),
+    dummy = 1
+  )
+
+head(msfhdr)
+glimpse(msfhdr)
+
+#-------------------------------------------------------------------------------
+# monthly market return file ...
+# - contains returns of S&P 500 firms (equally-weighted, value-weighted)
+#-------------------------------------------------------------------------------
+
+msp500 <- fread(paste0(dirpath, "msp500.csv")) %>%
+  mutate(
+    date = as.Date(caldt, "%d%b%Y")
+  )
+
+glimpse(msp500)
+
+# get all trading dates from market return files... 
+dates <- msp500 %>% select(date) %>%
+  mutate(
+    dummy = 1
+  )
+
+glimpse(dates)
+
+#-------------------------------------------------------------------------------
+# get s&p 500 list ...
+# - identifes which firms are in S&P
+#-------------------------------------------------------------------------------
+
+msp500list <- fread(paste0(dirpath, "msp500list.csv")) %>%
+  mutate(
+    begdt = as.Date(start, "%d%b%Y"),
+    enddt = as.Date(ending, "%d%b%Y")
+  ) %>%
+  select(
+    -start, -ending
+  )
+
+glimpse(msp500list)
+
+#-------------------------------------------------------------------------------
+# get monthly stock returns ...
+# - gives stock returns (monthly) of all firms
+#-------------------------------------------------------------------------------
+
+msf <- fread(paste0(dirpath, "msf.csv")) %>%
+  mutate(
+    date = as.Date(date, "%d%b%Y")
+  ) %>%
+  select(
+    permno, date, ret
+  )
+
+summary(msf) # diagnose return file
+glimpse(msf)
+
+msf <- msf %>%
+  filter(
+    !is.na(ret) & ret > -0.99
+  )
+
+summary(msf) # diagnose return file
+glimpse(msf)
+
+#-------------------------------------------------------------------------------
+# for the full list of firms, get all possible trading dates ...
+#-------------------------------------------------------------------------------
+
+stock_data1 <- msfhdr %>%
+  # get unique firms
+  distinct() %>%
+  # get trading dates for each firm 
+  left_join( # merge dates ...
+    dates,
+    by = "dummy"
+  ) %>%
+  select(-dummy)
+
+summary(stock_data1) # diagnose file
+glimpse(stock_data1)
+
+#-------------------------------------------------------------------------------
+# for all possible trading dates, see if there is returns ...
+#-------------------------------------------------------------------------------
+
+stock_data2 <- stock_data1 %>%
+  # get return data
+  left_join(
+    msf,
+    by = c("permno", "date")
+  ) %>%
+  # limit to trading trades
+  filter(
+    date >= begret & date <= endret
+  ) %>%
+  select(-begret, -endret)
+
+summary(stock_data2) # diagnose file
+
+#-------------------------------------------------------------------------------
+# Question? 
+# Return should be there, but missing. What to do with missing returns?
+#-------------------------------------------------------------------------------
+
+glimpse(stock_data2)
+
+#-------------------------------------------------------------------------------
+# restrict firms to S&P 500 firms only ...
+# get s&p list data ...
+#-------------------------------------------------------------------------------
+
+stock_data3 <- stock_data2 %>%
+  # when was the firm in the s&p list?
+  left_join(
+    msp500list,
+    by = c("permno")
+  )  %>%
+  # restrict sample
+  filter(
+    # drop unmerged data (S&P 500 firms only)
+    !is.na(begdt) &
+      # keep only firms within date range
+      (date >= begdt & date <= enddt) &
+      # define a sample period, if any
+      between(date, as.Date("1925-01-01"), 
+              as.Date("2020-12-31"))
+  ) %>%
+  select(-begdt, -enddt) %>%
+  # what to do with missing returns? 
+  # drop missing values (or)
+  # filter(
+  #  !is.na(ret) & ret >= -0.99
+  # ) %>%
+  # what to do with missing returns? 
+  # replace with ZERO
+  mutate(
+    ret = ifelse(is.na(ret), 0, ret)
+  ) 
+
+summary(stock_data3) # diagnose file
+glimpse(stock_data3)
+
+#-------------------------------------------------------------------------------
+# DO ALL THE PREVIOUS STEPS IN ONE SHOT
+#-------------------------------------------------------------------------------
+
+stock_data <- msfhdr %>%
+  # get unique firms
+  distinct() %>%
+  # get trading dates for each firm 
+  left_join( # merge dates ...
+    dates,
+    by = "dummy"
+  ) %>%
+  select(-dummy) %>%
+  # get return data
+  left_join(
+    msf,
+    by = c("permno", "date")
+  ) %>%
+  # limit to trading trades
+  filter(
+    date >= begret & date <= endret
+  ) %>%
+  select(-begret, -endret) %>%
+  # when was the firm in the s&p list?
+  left_join(
+    msp500list,
+    by = c("permno")
+  )  %>%
+  # restrict sample
+  filter(
+    # drop unmerged data (S&P 500 firms only)
+    !is.na(begdt) &
+      # keep only firms within date range
+      (date >= begdt & date <= enddt) &
+      # define a sample period, if any
+      between(date, as.Date("1990-01-01"), 
+              as.Date("2020-12-31"))
+  ) %>%
+  select(-begdt, -enddt) %>%
+  # what to do with missing returns? 
+  # drop missing values (or)
+  # filter(
+  #  !is.na(ret) & ret >= -0.99
+  # ) %>%
+  # what to do with missing returns? 
+  # replace with ZERO
+  mutate(
+    ret = ifelse(is.na(ret), 0, ret)
+  ) 
+
+rm("dates", "msfhdr", "msp500", "msf", "msp500list")
+rm("stock_data1", "stock_data2", "stock_data3")
+
+summary(stock_data) # diagnose file
+glimpse(stock_data)
+
+#-------------------------------------------------------------------------------
+# Industry classification
+#-------------------------------------------------------------------------------
+# http://mba.tuck.dartmouth.edu/pages/
+#   faculty/ken.french/Data_Library
+#-------------------------------------------------------------------------------
+
+ffind <- fread(paste0(gitpath,
+                      "fama-french-ind-class/main/ffind.csv")) %>%
+  filter(ind_def == 48) %>%
+  rename(ffclass = class) %>%
+  select(ffclass, sic_start, sic_end)
+
+glimpse(ffind)
+
+#-------------------------------------------------------------------------------
+# SQL merge - merge by range ...
+# - merge if firm's sic is between sic_start and sic_end values
+#-------------------------------------------------------------------------------
+
+ind_data_new <- 
+  sqldf("select * 
+        from stock_data LEFT JOIN ffind on 
+        (stock_data.hsiccd >= ffind.sic_start and 
+            stock_data.hsiccd <= ffind.sic_end)",
+        stringsAsFactors = FALSE) %>% 
+        # drop missing ffclass ....
+        filter(
+          !is.na(ffclass)
+        ) %>%
+          # drop some variables ....
+          select(
+            -sic_start, -sic_end
+          ) %>%
+            # sort data ...
+            arrange(
+              ffclass, date, permno
+            ) %>%
+              # group by ...
+              group_by(
+                ffclass, date
+              ) %>%
+                # compute average industry returns ...
+                summarise(
+                  indret = mean(ret)
+                ) %>%
+                  mutate(
+                    month = month(date),
+                    year = year(date)
+                  )
+
+rm("ffind")
+
+summary(ind_data_new) # diagnose file
+glimpse(ind_data_new)
+
+#-------------------------------------------------------------------------------
+# get three-factors for the 3-factor-model 
+#-------------------------------------------------------------------------------
+
+three_factor <-
+  fread(paste0(gitpath, 
+               "fama-french-ind-class/main/3factors.csv")) %>%
+  mutate(
+    year = round(date/100, digits = 0),
+    month = date - (year*100),
+    mktpre = mktpre/100,
+    smb = smb/100,
+    hml = hml/100,
+    rf = rf/100
+  ) %>% select(-date)
+
+glimpse(three_factor)
+
+#-------------------------------------------------------------------------------
+# final dataset
+#   - merge with three factors 
+#-------------------------------------------------------------------------------
+
+final_data <- ind_data_new %>%
+  # merge 3-factors to stock_data
+  left_join(
+    three_factor,
+    by = c("year", "month")
+  ) %>%
+    select(
+      -year, -month
+    )
+
+#-------------------------------------------------------------------------------
+# CAPM Estimates
+#-------------------------------------------------------------------------------
+
+capm_model <- 
+  final_data %>%
+  group_by(ffclass) %>%
+  group_modify(
+    ~ tidy(lm(indret ~ mktpre, data = .))
+  ) %>%
+  filter(
+    term %in% c("mktpre")
+  ) %>%
+  ggplot(
+    aes(
+      x = ffclass,
+      y = estimate
+    )
+  ) +
+  theme_tq_green() +
+  labs(
+    title = "CAPM Estimates for Market Risk Premium",
+    subtitle = "48 Industry Portfolios",
+    caption = paste("from", min(final_data$date), 
+                    "to", max(final_data$date)),
+    x = "Industry Classifications",
+    y = "Estimate"
+  ) +
+  geom_point(
+    shape=22, fill="red", color="darkred", size=2
+  ); capm_model
+
+#-------------------------------------------------------------------------------
+# Three-factor Model Estimates
+#-------------------------------------------------------------------------------
+
+ff3_model <- 
+  final_data %>%
+  group_by(ffclass) %>%
+  group_modify(
+    ~ tidy(lm(indret ~ mktpre +smb + hml, data = .))
+  ) %>%
+  filter(
+    !term %in% c("(Intercept)")
+  ) %>%
+  ggplot(
+    aes(
+      x = ffclass,
+      y = estimate,
+      group = term,
+      shape = term,
+      color = ffclass
+    )
+  ) +
+  theme_tq() +
+  labs(
+    title = "Three-factor Model Estimates",
+    subtitle = "48 Industry Portfolios",
+    caption = paste("from", min(final_data$date), 
+                    "to", max(final_data$date)),
+    x = "Industry Classifications",
+    y = "Estimate"
+  ) +
+  geom_point(
+    size=2
+  ); ff3_model
+```
+
+
+\newpage
+
+# Create your CV/Resume here in *R* markdown

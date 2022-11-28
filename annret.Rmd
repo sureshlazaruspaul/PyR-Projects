@@ -1,0 +1,1374 @@
+---
+title: "Computing One-Year, Two-Year, and Three-Year Cumulative Returns using Monthly Returns"
+author: "Suresh L. Paul"
+date: "`r Sys.Date()`"
+output: 
+  pdf_document:
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Research question
+
+
+*Explain the research question. Be concise and explain what your project is about.*
+
+
+
+
+In this project, I compute the one-year cumulative returns, two-year cumulative returns, and three-year cumulative returns using CRSP monthly stock return data between the years 1990 and 2016. 
+
+The formula for cumulative returns is given as follows,
+$$
+cumret_{(1,t)} = \prod_{n=1}^{t} (1 + r_{n}).
+$$
+
+That is, the one-year return is assimilated over 12 months and is given by,
+$$
+cumret_{(1,12)} = (1 + r_{1}) \times (1 + r_{2}) \times ... \times (1 + r_{11}) \times (1 + r_{12}),
+$$
+
+
+the two-year return is assimilated over 24 months and is given by,
+$$
+cumret_{(1,24)} = (1 + r_{1}) \times (1 + r_{2}) \times ... \times (1 + r_{23}) \times (1 + r_{24}),
+$$
+
+
+and the three-year return is assimilated over 36 months and is given by,
+$$
+cumret_{(1,36)} = (1 + r_{1}) \times (1 + r_{2}) \times ... \times (1 + r_{35}) \times (1 + r_{36}).
+$$
+
+
+Also, list all your *R* libraries and *R* verbs/functions that you plan to use and how? Also include the version of *R* and *RStudio* used in your analysis.
+
+
+***
+
+
+
+# Data analysis
+
+
+
+The final analysis data is compiled from 4 different datasets - the monthly individual stock return file (*msf.csv*), the header file containing key firm-level characteristics such as SIC codes(*msfhdr.csv*), market stock return file containing all trading dates since the advent of stock trading (*msp500.csv*), and the list of firms in the S&P 500 index (*msp500list.csv*).
+
+
+
+## Exploratory data analysis
+
+
+
+This subsection documents the initial diagnostic evaluation of all datasets.
+
+
+
+### Loading Libraries
+
+
+First, I start with installing and loading all required *R* libraries. They include,
+
+-   *data.table()*
+-   *tidyverse()*, which includes *ggplot2()* and *dplyr()*
+-   *lubridate()*
+-   *sqldf()*, which is used for many-to-many merge
+-   *broom()*
+-   *tidyquant()*
+
+
+Also, the path to datasets, namely *gitpath* and *dirpath*, are initialized.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# load all libraries ...
+
+library("data.table")
+library("tidyverse")
+library("lubridate")
+library("sqldf")
+library("broom")
+library("tidyquant")
+library("plotly")
+
+
+#-------------------------------------------------------------------------------
+# initialize path to files ...
+#-------------------------------------------------------------------------------
+
+# Github path to data
+gitpath <- "https://raw.githubusercontent.com/sureshlazaruspaul/"
+
+# Local path to files
+dirpath <- "C:/data/stock_data/"
+```
+
+
+***
+
+
+
+### Importing strategy and Descriptive Summary
+
+
+
+All datasets are imported using the *fread()* function from the *data.table* library package. Of the six imported datasets, four (i.e., msf.csv, msfhdr.csv, msp500.csv, and msp500list.csv) are locally available whereas the remaining two (i.e., ffind.csv and 3factors.csv) is imported from online sources.
+
+
+#### Stock Header File (msfhdr.csv)
+
+##### Import
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# stock data header file
+# - contains all firms
+# - contains industry codes, firm name, and identifiers
+# - contains beginning and ending date of trading
+# - create a column of ones(used for merging later on)
+#-------------------------------------------------------------------------------
+
+msfhdr <- fread(paste0(dirpath, "msfhdr.csv")) %>%
+  select(c("permno", "hsiccd",
+           "hcomnam", "begret", "endret")) %>%
+  mutate(
+    begret = as.Date(begret, "%d%b%Y"),
+    endret = as.Date(endret, "%d%b%Y"),
+    dummy = 1
+  )
+```
+
+
+##### Describe
+
+
+-   *head()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(msfhdr)
+```
+
+-   *tail()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(msfhdr)
+```
+
+-   *glimpse()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(msfhdr)
+```
+
+-   *str()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(msfhdr)
+```
+
+-   *class()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(msfhdr)
+```
+
+#### Market Stock Return File (msp500.csv)
+
+##### Import
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# monthly market return file ...
+# - contains returns of S&P 500 firms (equally-weighted, value-weighted)
+#-------------------------------------------------------------------------------
+
+msp500 <- fread(paste0(dirpath, "msp500.csv")) %>%
+  mutate(
+    date = as.Date(caldt, "%d%b%Y")
+  )
+
+# get all trading dates from market return files... 
+dates <- msp500 %>% select(date) %>%
+  mutate(
+    dummy = 1
+  )
+```
+
+##### Describe
+
+-   *head()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(msp500)
+```
+
+-   *tail()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(msp500)
+```
+
+-   *glimpse()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(msp500)
+```
+
+-   *str()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(msp500)
+```
+
+-   *class()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(msp500)
+```
+
+#### List of S&P 500 firms (msp500list.csv)
+
+##### Import
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# get s&p 500 list ...
+# - identifes which firms are in S&P
+#-------------------------------------------------------------------------------
+
+msp500list <- fread(paste0(dirpath, "msp500list.csv")) %>%
+  mutate(
+    begdt = as.Date(start, "%d%b%Y"),
+    enddt = as.Date(ending, "%d%b%Y")
+  ) %>%
+  select(
+    -start, -ending
+  )
+```
+
+##### Describe
+
+-   *head()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(msp500list)
+```
+
+-   *tail()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(msp500list)
+```
+
+-   *glimpse()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(msp500list)
+```
+
+-   *str()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(msp500list)
+```
+
+-   *class()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(msp500list)
+```
+
+#### Monthly Stock Return File (msf.csv)
+
+##### Import
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# get monthly stock returns ...
+# - gives stock returns (monthly) of all firms
+#-------------------------------------------------------------------------------
+
+msf <- fread(paste0(dirpath, "msf.csv")) %>%
+  mutate(
+    date = as.Date(date, "%d%b%Y")
+  ) %>%
+  select(
+    permno, date, ret
+  )
+
+summary(msf) # diagnose return file
+
+msf <- msf %>%
+  filter(
+    !is.na(ret) & ret > -0.99
+  )
+
+summary(msf) # diagnose return file
+```
+
+##### Describe
+
+-   *head()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(msf)
+```
+
+-   *tail()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(msf)
+```
+
+-   *glimpse()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(msf)
+```
+
+-   *str()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(msf)
+```
+
+-   *class()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(msf)
+```
+
+##### Descriptive plots
+
+-   histogram of monthly returns (ret)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- msf %>%
+  filter(
+    !is.na(ret)
+  ) %>%
+  ggplot() +
+  theme_classic() +
+  xlim(-1,1) +
+  labs(
+    title = "Distribution of Monthly Returns",
+    subtitle = "Sample: S&P 500 firms only",
+    caption = paste("From", min(msf$date), 
+                    "to", max(msf$date)),
+    x = "Monthly Returns",
+    y = "Frequency"
+  )
+
+# plot
+h1 <- canvas +
+  geom_histogram(
+    aes(
+      x=ret
+    ),
+    bins = 100,
+    fill = "red"
+  )
+
+h2 <- h1 +
+  geom_histogram(
+    aes(
+      x=ret
+    ),
+    bins = 250,
+    fill = "green"
+  )
+
+h2 +
+  geom_histogram(
+    aes(
+      x=ret
+    ),
+    bins = 1000,
+    fill = "blue"
+  )
+```
+
+
+-   boxplot of monthly returns (ret)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvasa <- msf %>%
+  ggplot() + 
+  theme_light() +
+  ylim(-100, 100) +
+  labs(
+    title = "Distribution of Monthly Returns",
+    subtitle = "Sample: S&P 500 firms only",
+    caption = paste("From", min(msf$date), 
+                    "to", max(msf$date)),
+    x = "",
+    y = "Monthly Returns (%)"
+  )
+
+canvasa + 
+  geom_boxplot(aes(y = ret*100)) + 
+  scale_x_discrete() +
+  coord_flip()
+```
+
+
+***
+
+#### Variables and observations
+
+From the *glimpse()* function used in the previous section, we can manually ascertain how many variables and observations were there in each dataset. Alternately, the number of observations can be obtained using the *nrow()* function and the number of variables satisfying each criteria can be obtained using a combination of *length()*, *names()*, and *select_if()* functions.
+
+
+-   Stock Header File (msfhdr.csv)
+    -   number of variables: `r length(names(msfhdr))`
+        -   number of numeric variables: `r length(names(dplyr::select_if(msfhdr,is.numeric)))`
+            -   number of integer variables: `r length(names(dplyr::select_if(msfhdr,is.integer)))`
+            -   number of double/float variables: `r length(names(dplyr::select_if(msfhdr,is.double)))`
+        -   number of character variables: `r length(names(dplyr::select_if(msfhdr,is.character)))`
+        -   number of factor variables: `r length(names(dplyr::select_if(msfhdr,is.factor)))`
+            -   number of factors with levels: 0
+        -   number of date variables: `r length(names(dplyr::select_if(msfhdr,is.Date)))`
+    -   number of observations:  `r nrow(msfhdr)`
+
+-   Market Stock Return File (msp500.csv)
+    -   number of variables: `r length(names(msp500))`
+        -   number of numeric variables: `r length(names(dplyr::select_if(msp500,is.numeric)))`
+            -   number of integer variables: `r length(names(dplyr::select_if(msp500,is.integer)))`
+            -   number of double/float variables: `r length(names(dplyr::select_if(msp500,is.double)))`
+        -   number of character variables: `r length(names(dplyr::select_if(msp500,is.character)))`
+        -   number of factor variables: `r length(names(dplyr::select_if(msp500,is.factor)))`
+            -   number of factors with levels: 0
+        -   number of date variables: `r length(names(dplyr::select_if(msp500,is.Date)))`
+    -   number of observations: `r nrow(msp500)`
+
+-   List of S&P 500 firms (msp500list.csv)
+    -   number of variables: `r length(names(msp500list))`
+        -   number of numeric variables: `r length(names(dplyr::select_if(msp500list,is.numeric)))`
+            -   number of integer variables: `r length(names(dplyr::select_if(msp500list,is.integer)))`
+            -   number of double/float variables: `r length(names(dplyr::select_if(msp500list,is.double)))`
+        -   number of character variables: `r length(names(dplyr::select_if(msp500list,is.character)))`
+        -   number of factor variables: `r length(names(dplyr::select_if(msp500list,is.factor)))`
+            -   number of factors with levels: 0
+        -   number of date variables: `r length(names(dplyr::select_if(msp500list,is.Date)))`
+    -   number of observations: `r nrow(msp500list)`
+
+-   Monthly Stock Return File (msf.csv)
+    -   number of variables: `r length(names(msf))`
+        -   number of numeric variables: `r length(names(dplyr::select_if(msf,is.numeric)))`
+            -   number of integer variables: `r length(names(dplyr::select_if(msf,is.integer)))`
+            -   number of double/float variables: `r length(names(dplyr::select_if(msf,is.double)))`
+        -   number of character variables: `r length(names(dplyr::select_if(msf,is.character)))`
+        -   number of factor variables: `r length(names(dplyr::select_if(msf,is.factor)))`
+            -   number of factors with levels: 0
+        -   number of date variables: `r length(names(dplyr::select_if(msf,is.Date)))`
+    -   number of observations: `r nrow(msf)`
+
+#### Descriptive statistics
+
+Here, the *summary()* and *quantile()* functions are used to obtain statistical summaries on each study variable.
+
+
+##### Stock Header File (msfhdr.csv)
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+summary(msfhdr)
+```
+
+
+##### Market Stock Return File (msp500.csv)
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+summary(msp500)
+```
+
+##### List of S&P 500 firms (msp500list.csv)
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+summary(msp500list)
+```
+
+##### Monthly Stock Return File (msf.csv)
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+summary(msf$ret)
+quantile(msf$ret, probs = c(0.01, 0.05, 0.10, 0.25, 0.50, 
+                            0.75, 0.90, 0.95, 0.99), na.rm = FALSE)
+```
+
+### Treatment of missing variables
+
+The data on monthly returns has missing values. All missing values are replaced with zero returns.
+
+## Empirical data analysis
+
+This section details the main empirical analysis.
+
+### Merging, subsetting and filtering
+
+First, we start with the universe of all publicly traded firms in CRSP header file (*msfhdr*). To these firms, we merge with all possible trading dates obtained from market returns file (*msp500*). This merge is a many-to-many merge.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# for the full list of firms, get all possible trading dates ...
+#-------------------------------------------------------------------------------
+
+stock_data1 <- msfhdr %>%
+  # get unique firms
+  distinct() %>%
+  # get trading dates for each firm 
+  left_join( # merge dates ...
+    dates,
+    by = "dummy"
+  ) %>%
+  select(-dummy)
+
+summary(stock_data1) # diagnose file
+glimpse(stock_data1)
+```
+
+We join `r nrow(msfhdr)` unique firms with `r nrow(dates)` unique trading days to obtain `r nrow(stock_data1)` observations.
+
+</br>
+
+Second, we obtain monthly returns for all these firms on the respective trading days by merging with the monthly returns file (*msf*). This is a simple left merge. We, then, drop all observations outside starting trading date (*begret*, also known as IPO date) and ending trading date (*endret*, also known as Delisted/Defunct date) for each firm obtained from the header file.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# for all possible trading dates, see if there is returns ...
+#-------------------------------------------------------------------------------
+
+stock_data2 <- stock_data1 %>%
+  # get return data
+  left_join(
+    msf,
+    by = c("permno", "date")
+  ) %>%
+  # limit to trading trades
+  filter(
+    date >= begret & date <= endret
+  ) %>%
+  select(-begret, -endret)
+
+summary(stock_data2) # diagnose file
+
+#-------------------------------------------------------------------------------
+# Question? 
+# Return should be there, but missing. 
+# What to do with missing returns?
+#-------------------------------------------------------------------------------
+
+glimpse(stock_data2)
+```
+
+We start with `r nrow(stock_data1)` observations and end up with `r nrow(stock_data2)` observations after imposing data restrictions.
+
+</br>
+
+Third, we only keep S&P 500 firms. For this purpose, we merge with the file conatining the list of all S&P 500 firms (*msp500list*). This is a simple left merge. We, then, drop all observations outside starting S&P entry date (*begdt*) and ending S&P exit date (*enddt*) for each firm in our dataset.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# restrict firms to S&P 500 firms only ...
+# get s&p list data ...
+#-------------------------------------------------------------------------------
+
+stock_data3 <- stock_data2 %>%
+  # when was the firm in the s&p list?
+  left_join(
+    msp500list,
+    by = c("permno")
+  )  %>%
+  # restrict sample
+  filter(
+    # drop unmerged data (S&P 500 firms only)
+    !is.na(begdt) &
+      # keep only firms within date range
+      (date >= begdt & date <= enddt) &
+      # define a sample period, if any
+      between(date, as.Date("1925-01-01"), 
+                    as.Date("2020-12-31"))
+  ) %>%
+  select(-begdt, -enddt) %>%
+  # what to do with missing returns? 
+  # replace with ZERO
+  mutate(
+    ret = ifelse(is.na(ret), 0, ret)
+  ) 
+
+summary(stock_data3) # diagnose file
+glimpse(stock_data3)
+```
+
+We start with `r nrow(stock_data2)` observations and end up with `r nrow(stock_data3)` observations after imposing data restrictions.
+
+</br>
+
+Finally, we compute the one-year, two-year, and three-year returns by creating 36 new variables - lag 1 of return (*lag1*), lag 2 of return (*lag2*), and so on. We also find the number of missing values for each cumulative returns: from lag 1 (*lag1*) and lag 12 (*lag12*) for one-year return as *nmiss_1yr*, between lag 1 (*lag1*) and lag 24 (*lag24*) for two-year return as *nmiss_2yr*, and between lag 1 (*lag1*) and lag 36 (*lag36*) for three-year return as *nmiss_3yr*. We then use the following formula to compute cumulative returns,
+$$
+cumret_{(1,t)} = \prod_{n=1}^{t} (1 + r_{n}).
+$$
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# How to find return in the previous 12 months? ret1yr
+# How to find return in the previous 24 months? ret2yr
+# How to find return in the previous 36 months? ret3yr
+#-------------------------------------------------------------------------------
+
+annret <- stock_data3 %>%
+  mutate(
+    lag0 = 1 + ret
+  ) %>%
+  group_by(permno) %>%
+  arrange(permno, date) %>%
+  # create lags of return ...
+  do(data.frame(., setNames(shift(.$lag0, 1:35), c(paste0("lag", 1:35))))) %>%
+  ungroup() %>%
+  # count missing
+  mutate(
+    nmiss_3yr = rowSums(is.na(.))
+  ) %>%
+  # drop varibles
+  select(
+    -c(lag24:lag35)
+  ) %>%
+  # count missing
+  mutate(
+    nmiss_2yr = rowSums(is.na(.))
+  ) %>%
+  # drop varibles
+  select(
+    -c(lag12:lag23)
+  ) %>%
+  # count missing
+  mutate(
+    nmiss_1yr = rowSums(is.na(.))
+  ) %>%
+  # drop varibles
+  select(
+    -c(lag0:lag11)
+  ) %>%
+  mutate(
+    lag0 = 1 + ret
+  ) %>% 
+  group_by(permno) %>% 
+  arrange(permno, date) %>% 
+  # create lags of return ...
+  do(data.frame(., setNames(shift(.$lag0, 1:35), c(paste0("lag", 1:35))))) %>%
+  ungroup()
+
+rm("dates", "msfhdr", "msp500", "msf", "msp500list",
+   "stock_data1", "stock_data2", "stock_data3")
+
+#-------------------------------------------------------------------------------
+# initialize all returns to 1
+#-------------------------------------------------------------------------------
+
+annret$ret1yr <- 1
+annret$ret2yr <- 1
+annret$ret3yr <- 1
+
+for(index in 0:11) {
+  annret <- annret %>%
+    mutate(
+      ret1yr = 
+        ret1yr * eval(parse(text=paste0("lag", index))))
+}
+
+for(index in 0:23) {
+  annret <- annret %>%
+    mutate(
+      ret2yr = 
+        ret2yr * eval(parse(text=paste0("lag", index))))
+}
+
+for(index in 0:35) {
+  annret <- annret %>%
+    mutate(
+      ret3yr = 
+        ret3yr * eval(parse(text=paste0("lag", index))))
+}
+
+#-------------------------------------------------------------------------------
+# how many missing returns within 12/24/36 months is acceptable?
+#   - only 2 per year
+#-------------------------------------------------------------------------------
+
+annret <- annret %>%
+  mutate(
+    ret1yr = ifelse(nmiss_1yr <= 2, ret1yr - 1, NA),
+    ret2yr = ifelse(nmiss_2yr <= 4, ret2yr - 1, NA),
+    ret3yr = ifelse(nmiss_3yr <= 6, ret3yr - 1, NA)
+  ) %>%
+  select(
+    -ret, -contains("lag", ignore.case = TRUE)
+  )
+
+summary(annret) # diagnose file
+glimpse(annret)
+```
+
+We end up with `r nrow(annret)` observations after imposing data restrictions.
+
+### Univariate Analysis
+
+Here we summarise the cumulative returns.
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min1yr <- round(min(annret$ret1yr, na.rm = TRUE)*100, digits = 3)
+min2yr <- round(min(annret$ret2yr, na.rm = TRUE)*100, digits = 3)
+min3yr <- round(min(annret$ret3yr, na.rm = TRUE)*100, digits = 3)
+
+max1yr <- round(max(annret$ret1yr, na.rm = TRUE)*100, digits = 3)
+max2yr <- round(max(annret$ret2yr, na.rm = TRUE)*100, digits = 3)
+max3yr <- round(max(annret$ret3yr, na.rm = TRUE)*100, digits = 3)
+
+mean1yr <- round(mean(annret$ret1yr, na.rm = TRUE)*100, digits = 3)
+mean2yr <- round(mean(annret$ret2yr, na.rm = TRUE)*100, digits = 3)
+mean3yr <- round(mean(annret$ret3yr, na.rm = TRUE)*100, digits = 3)
+
+sd1yr <- round(sd(annret$ret1yr, na.rm = TRUE)*100, digits = 3)
+sd2yr <- round(sd(annret$ret2yr, na.rm = TRUE)*100, digits = 3)
+sd3yr <- round(sd(annret$ret3yr, na.rm = TRUE)*100, digits = 3)
+
+p1_1yr <- round(quantile(annret$ret1yr, probs = c(0.01), na.rm = TRUE)*100, digits = 3)
+p1_2yr <- round(quantile(annret$ret2yr, probs = c(0.01), na.rm = TRUE)*100, digits = 3)
+p1_3yr <- round(quantile(annret$ret3yr, probs = c(0.01), na.rm = TRUE)*100, digits = 3)
+
+p5_1yr <- round(quantile(annret$ret1yr, probs = c(0.05), na.rm = TRUE)*100, digits = 3)
+p5_2yr <- round(quantile(annret$ret2yr, probs = c(0.05), na.rm = TRUE)*100, digits = 3)
+p5_3yr <- round(quantile(annret$ret3yr, probs = c(0.05), na.rm = TRUE)*100, digits = 3)
+
+p10_1yr <- round(quantile(annret$ret1yr, probs = c(0.10), na.rm = TRUE)*100, digits = 3)
+p10_2yr <- round(quantile(annret$ret2yr, probs = c(0.10), na.rm = TRUE)*100, digits = 3)
+p10_3yr <- round(quantile(annret$ret3yr, probs = c(0.10), na.rm = TRUE)*100, digits = 3)
+
+q1_1yr <- round(quantile(annret$ret1yr, probs = c(0.25), na.rm = TRUE)*100, digits = 3)
+q1_2yr <- round(quantile(annret$ret2yr, probs = c(0.25), na.rm = TRUE)*100, digits = 3)
+q1_3yr <- round(quantile(annret$ret3yr, probs = c(0.25), na.rm = TRUE)*100, digits = 3)
+
+q2_1yr <- round(quantile(annret$ret1yr, probs = c(0.50), na.rm = TRUE)*100, digits = 3)
+q2_2yr <- round(quantile(annret$ret2yr, probs = c(0.50), na.rm = TRUE)*100, digits = 3)
+q2_3yr <- round(quantile(annret$ret3yr, probs = c(0.50), na.rm = TRUE)*100, digits = 3)
+
+q3_1yr <- round(quantile(annret$ret1yr, probs = c(0.75), na.rm = TRUE)*100, digits = 3)
+q3_2yr <- round(quantile(annret$ret2yr, probs = c(0.75), na.rm = TRUE)*100, digits = 3)
+q3_3yr <- round(quantile(annret$ret3yr, probs = c(0.75), na.rm = TRUE)*100, digits = 3)
+
+p90_1yr <- round(quantile(annret$ret1yr, probs = c(0.90), na.rm = TRUE)*100, digits = 3)
+p90_2yr <- round(quantile(annret$ret2yr, probs = c(0.90), na.rm = TRUE)*100, digits = 3)
+p90_3yr <- round(quantile(annret$ret3yr, probs = c(0.90), na.rm = TRUE)*100, digits = 3)
+
+p95_1yr <- round(quantile(annret$ret1yr, probs = c(0.95), na.rm = TRUE)*100, digits = 3)
+p95_2yr <- round(quantile(annret$ret2yr, probs = c(0.95), na.rm = TRUE)*100, digits = 3)
+p95_3yr <- round(quantile(annret$ret3yr, probs = c(0.95), na.rm = TRUE)*100, digits = 3)
+
+p99_1yr <- round(quantile(annret$ret1yr, probs = c(0.99), na.rm = TRUE)*100, digits = 3)
+p99_2yr <- round(quantile(annret$ret2yr, probs = c(0.99), na.rm = TRUE)*100, digits = 3)
+p99_3yr <- round(quantile(annret$ret3yr, probs = c(0.99), na.rm = TRUE)*100, digits = 3)
+```
+
+| Statistic | One-yr Return          | Two-yr Return | Three-yr Return |
+|-----------|-----------------------:|--------------:|----------------:|
+| Min       | `r min1yr`             | `r min2yr`    | `r min3yr`      |
+| P1        | `r p1_1yr`             | `r p1_2yr`    | `r p1_3yr`      |
+| P5        | `r p5_1yr`             | `r p5_2yr`    | `r p5_3yr`      |
+| P10       | `r p10_1yr`            | `r p10_2yr`   | `r p10_3yr`     |
+| Q1 = P25  | `r q1_1yr`             | `r q1_2yr`    | `r q1_3yr`      |
+| Mean      | `r mean1yr`            | `r mean2yr`   | `r mean3yr`     |
+| Median    | `r q2_1yr`             | `r q2_2yr`    | `r q2_3yr`      |
+| Q3 = P75  | `r q3_1yr`             | `r q3_2yr`    | `r q3_3yr`      |
+| P90       | `r p90_1yr`            | `r p90_2yr`   | `r p90_3yr`     |
+| P95       | `r p95_1yr`            | `r p95_2yr`   | `r p95_3yr`     |
+| P99       | `r p99_1yr`            | `r p99_2yr`   | `r p99_3yr`     |
+| Max       | `r max1yr`             | `r max2yr`    | `r max3yr`      |
+| Std. Dev  | `r sd1yr`              | `r sd2yr`     | `r sd3yr`       |
+
+
+
+-   *boxplot()* of one-year return
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+canvas1 <- annret %>%
+  ggplot() + 
+  theme_light() +
+  ylim(-100, 100) +
+  labs(
+    title = "Distribution of One-Year Returns",
+    subtitle = "Sample: S&P 500 firms only",
+    caption = paste("From", min(annret$date), 
+                    "to", max(annret$date)),
+    x = "",
+    y = "One-Year Returns (%)"
+  )
+
+canvas1 + 
+  geom_boxplot(aes(y = ret1yr*100)) +
+  scale_x_discrete() +
+  coord_flip()
+```
+
+-   *boxplot()* of two-year return
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+canvas2 <- annret %>%
+  ggplot() + 
+  theme_light() +
+  ylim(-100, 100) +
+  labs(
+    title = "Distribution of Two-Year Returns",
+    subtitle = "Sample: S&P 500 firms only",
+    caption = paste("From", min(annret$date), 
+                    "to", max(annret$date)),
+    x = "",
+    y = "Two-Year Returns (%)"
+  )
+
+canvas2 + 
+  geom_boxplot(aes(y = ret2yr*100)) +
+  scale_x_discrete() +
+  coord_flip()
+```
+
+
+
+-   *boxplot()* of three-year return
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+canvas3 <- annret %>%
+  ggplot() + 
+  theme_light() +
+  ylim(-100, 100) +
+  labs(
+    title = "Distribution of Three-Year Returns",
+    subtitle = "Sample: S&P 500 firms only",
+    caption = paste("From", min(annret$date), 
+                    "to", max(annret$date)),
+    x = "",
+    y = "Three-Year Returns (%)"
+  )
+
+canvas3 + 
+  geom_boxplot(aes(y = ret3yr*100)) +
+  scale_x_discrete() +
+  coord_flip()
+```
+
+
+
+# Conclusion
+
+To summarise, describe your findings of your empirical analysis. Also, list the total number of *R* verbs that you have used in your study.
+
+# Full *R* code
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+library(data.table)
+library(tidyverse)
+library(lubridate)
+library(sqldf)
+library(broom)
+library(tidyquant)
+library(tidyr)
+
+#-------------------------------------------------------------------------------
+# path to files ...
+#-------------------------------------------------------------------------------
+
+# Github path to data
+gitpath <- "https://raw.githubusercontent.com/sureshlazaruspaul/"
+
+# Local path to files
+dirpath <- "C:/data/stock_data/"
+
+#-------------------------------------------------------------------------------
+# stock data header file
+# - contains all firms
+# - contains industry codes, firm name, and identifiers
+# - contains beginning and ending date of trading
+# - create a column of ones(used for merging later on)
+#-------------------------------------------------------------------------------
+
+msfhdr <- fread(paste0(dirpath, "msfhdr.csv")) %>%
+  select(c("permno", "hsiccd",
+           "hcomnam", "begret", "endret")) %>%
+  mutate(
+    begret = as.Date(begret, "%d%b%Y"),
+    endret = as.Date(endret, "%d%b%Y"),
+    dummy = 1
+  )
+
+head(msfhdr)
+glimpse(msfhdr)
+
+#-------------------------------------------------------------------------------
+# monthly market return file ...
+# - contains returns of S&P 500 firms (equally-weighted, value-weighted)
+#-------------------------------------------------------------------------------
+
+msp500 <- fread(paste0(dirpath, "msp500.csv")) %>%
+  mutate(
+    date = as.Date(caldt, "%d%b%Y")
+  )
+
+glimpse(msp500)
+
+# get all trading dates from market return files... 
+dates <- msp500 %>% select(date) %>%
+  mutate(
+    dummy = 1
+  )
+
+glimpse(dates)
+
+#-------------------------------------------------------------------------------
+# get s&p 500 list ...
+# - identifes which firms are in S&P
+#-------------------------------------------------------------------------------
+
+msp500list <- fread(paste0(dirpath, "msp500list.csv")) %>%
+  mutate(
+    begdt = as.Date(start, "%d%b%Y"),
+    enddt = as.Date(ending, "%d%b%Y")
+  ) %>%
+  select(
+    -start, -ending
+  )
+
+glimpse(msp500list)
+
+#-------------------------------------------------------------------------------
+# get monthly stock returns ...
+# - gives stock returns (monthly) of all firms
+#-------------------------------------------------------------------------------
+
+msf <- fread(paste0(dirpath, "msf.csv")) %>%
+  mutate(
+    date = as.Date(date, "%d%b%Y")
+  ) %>%
+  select(
+    permno, date, ret
+  )
+
+summary(msf) # diagnose return file
+glimpse(msf)
+
+msf <- msf %>%
+  filter(
+    !is.na(ret) & ret > -0.99
+  )
+
+summary(msf) # diagnose return file
+glimpse(msf)
+
+#-------------------------------------------------------------------------------
+# for the full list of firms, get all possible trading dates ...
+#-------------------------------------------------------------------------------
+
+stock_data1 <- msfhdr %>%
+  # get unique firms
+  distinct() %>%
+  # get trading dates for each firm 
+  left_join( # merge dates ...
+    dates,
+    by = "dummy"
+  ) %>%
+  select(-dummy)
+
+summary(stock_data1) # diagnose file
+glimpse(stock_data1)
+
+#-------------------------------------------------------------------------------
+# for all possible trading dates, see if there is returns ...
+#-------------------------------------------------------------------------------
+
+stock_data2 <- stock_data1 %>%
+  # get return data
+  left_join(
+    msf,
+    by = c("permno", "date")
+  ) %>%
+  # limit to trading trades
+  filter(
+    date >= begret & date <= endret
+  ) %>%
+  select(-begret, -endret)
+
+summary(stock_data2) # diagnose file
+
+#-------------------------------------------------------------------------------
+# Question? 
+# Return should be there, but missing. What to do with missing returns?
+#-------------------------------------------------------------------------------
+
+glimpse(stock_data2)
+
+#-------------------------------------------------------------------------------
+# restrict firms to S&P 500 firms only ...
+# get s&p list data ...
+#-------------------------------------------------------------------------------
+
+stock_data3 <- stock_data2 %>%
+  # when was the firm in the s&p list?
+  left_join(
+    msp500list,
+    by = c("permno")
+  )  %>%
+  # restrict sample
+  filter(
+    # drop unmerged data (S&P 500 firms only)
+    !is.na(begdt) &
+      # keep only firms within date range
+      (date >= begdt & date <= enddt) &
+      # define a sample period, if any
+      between(date, as.Date("1925-01-01"), 
+              as.Date("2020-12-31"))
+  ) %>%
+  select(-begdt, -enddt) %>%
+  # what to do with missing returns? 
+  # drop missing values (or)
+  # filter(
+  #  !is.na(ret) & ret >= -0.99
+  # ) %>%
+  # what to do with missing returns? 
+  # replace with ZERO
+  mutate(
+    ret = ifelse(is.na(ret), 0, ret)
+  ) 
+
+summary(stock_data3) # diagnose file
+glimpse(stock_data3)
+
+#-------------------------------------------------------------------------------
+# DO ALL THE PREVIOUS STEPS IN ONE SHOT
+#-------------------------------------------------------------------------------
+
+stock_data <- msfhdr %>%
+  # get unique firms
+  distinct() %>%
+  # get trading dates for each firm 
+  left_join( # merge dates ...
+    dates,
+    by = "dummy"
+  ) %>%
+  select(-dummy) %>%
+  # get return data
+  left_join(
+    msf,
+    by = c("permno", "date")
+  ) %>%
+  # limit to trading trades
+  filter(
+    date >= begret & date <= endret
+  ) %>%
+  select(-begret, -endret) %>%
+  # when was the firm in the s&p list?
+  left_join(
+    msp500list,
+    by = c("permno")
+  )  %>%
+  # restrict sample
+  filter(
+    # drop unmerged data (S&P 500 firms only)
+    !is.na(begdt) &
+      # keep only firms within date range
+      (date >= begdt & date <= enddt) &
+      # define a sample period, if any
+      between(date, as.Date("1925-01-01"),
+                    as.Date("2020-12-31"))
+  ) %>%
+  select(-begdt, -enddt) %>%
+  # what to do with missing returns?
+  # replace with ZERO
+  mutate(
+    ret = ifelse(is.na(ret), 0, ret)
+  ) 
+
+rm("dates", "msfhdr", "msp500", "msf", "msp500list")
+rm("stock_data1", "stock_data2", "stock_data3")
+
+summary(stock_data) # diagnose file
+glimpse(stock_data)
+
+#-------------------------------------------------------------------------------
+# How to find return in the previous 12 months? ret1yr
+# How to find return in the previous 24 months? ret2yr
+# How to find return in the previous 36 months? ret3yr
+#-------------------------------------------------------------------------------
+
+annret <- stock_data %>%
+  mutate(
+    lag0 = 1 + ret
+  ) %>%
+  group_by(permno) %>%
+  arrange(permno, date) %>%
+  # create lags of return ...
+  do(data.frame(., setNames(shift(.$lag0, 1:35), c(paste0("lag", 1:35))))) %>%
+  ungroup() %>%
+  # count missing
+  mutate(
+    nmiss_3yr = rowSums(is.na(.))
+  ) %>%
+  # drop varibles
+  select(
+    -c(lag24:lag35)
+  ) %>%
+  # count missing
+  mutate(
+    nmiss_2yr = rowSums(is.na(.))
+  ) %>%
+  # drop varibles
+  select(
+    -c(lag12:lag23)
+  ) %>%
+  # count missing
+  mutate(
+    nmiss_1yr = rowSums(is.na(.))
+  ) %>%
+  # drop varibles
+  select(
+    -c(lag0:lag11)
+  ) %>%
+  mutate(
+    lag0 = 1 + ret
+  ) %>% 
+  group_by(permno) %>% 
+  arrange(permno, date) %>% 
+  # create lags of return ...
+  do(data.frame(., setNames(shift(.$lag0, 1:35), c(paste0("lag", 1:35))))) %>%
+  ungroup()
+
+#-------------------------------------------------------------------------------
+# initialize all returns to 1
+#-------------------------------------------------------------------------------
+
+annret$ret1yr <- 1
+annret$ret2yr <- 1
+annret$ret3yr <- 1
+
+for(index in 0:11) {
+  annret <- annret %>%
+    mutate(
+      ret1yr = 
+        ret1yr * eval(parse(text=paste0("lag", index))))
+}
+
+for(index in 0:23) {
+  annret <- annret %>%
+    mutate(
+      ret2yr = 
+        ret2yr * eval(parse(text=paste0("lag", index))))
+}
+
+for(index in 0:35) {
+  annret <- annret %>%
+    mutate(
+      ret3yr = 
+        ret3yr * eval(parse(text=paste0("lag", index))))
+}
+
+#-------------------------------------------------------------------------------
+# how many missing returns within 12/24/36 months is acceptable?
+#-------------------------------------------------------------------------------
+
+annret <- annret %>%
+  mutate(
+    ret1yr = ifelse(nmiss_1yr <= 2, ret1yr - 1, NA),
+    ret2yr = ifelse(nmiss_2yr <= 4, ret2yr - 1, NA),
+    ret3yr = ifelse(nmiss_3yr <= 6, ret3yr - 1, NA)
+  ) %>%
+  select(
+    -ret, -contains("lag", ignore.case = TRUE)
+  )
+
+
+
+summary(annret) # diagnose file
+glimpse(annret)
+
+#-------------------------------------------------------------------------------
+# box plot
+#-------------------------------------------------------------------------------
+
+canvas1 <- annret %>%
+  ggplot() + 
+  theme_light() +
+  ylim(-100, 100) +
+  labs(
+    title = "Distribution of One-Year Returns",
+    subtitle = "Sample: S&P 500 firms only",
+    caption = paste("From", min(annret$date), 
+                    "to", max(annret$date)),
+    x = "",
+    y = "One-Year Returns (%)"
+  )
+
+canvas1 + 
+  geom_boxplot(aes(y = ret1yr*100)) +
+  scale_x_discrete() +
+  coord_flip()
+
+#-------------------------------------------------------------------------------
+
+canvas2 <- annret %>%
+  ggplot() + 
+  theme_light() +
+  ylim(-100, 100) +
+  labs(
+    title = "Distribution of Two-Year Returns",
+    subtitle = "Sample: S&P 500 firms only",
+    caption = paste("From", min(annret$date), 
+                      "to", max(annret$date)),
+    x = "",
+    y = "Two-Year Returns (%)"
+  )
+  
+canvas2 + 
+  geom_boxplot(aes(y = ret2yr*100)) +
+  scale_x_discrete() +
+  coord_flip()
+
+#-------------------------------------------------------------------------------
+
+canvas3 <- annret %>%
+  ggplot() + 
+  theme_light() +
+  ylim(-100, 100) +
+  labs(
+    title = "Distribution of Three-Year Returns",
+    subtitle = "Sample: S&P 500 firms only",
+    caption = paste("From", min(annret$date), 
+                      "to", max(annret$date)),
+    x = "",
+    y = "Three-Year Returns (%)"
+  )
+
+canvas3 + 
+  geom_boxplot(aes(y = ret3yr*100)) +
+  scale_x_discrete() +
+  coord_flip()
+
+#-------------------------------------------------------------------------------
+# descriptive statistics
+#-------------------------------------------------------------------------------
+
+summary(annret$ret1yr)
+quantile(annret$ret1yr,
+         probs = c(0.01, 0.05, 0.10, 0.25, 0.50, 
+                   0.75, 0.90, 0.95, 0.99), na.rm = TRUE)
+
+
+summary(annret$ret2yr)
+quantile(annret$ret2yr,
+         probs = c(0.01, 0.05, 0.10, 0.25, 0.50, 
+                   0.75, 0.90, 0.95, 0.99), na.rm = TRUE)
+
+
+summary(annret$ret3yr)
+quantile(annret$ret3yr,
+         probs = c(0.01, 0.05, 0.10, 0.25, 0.50, 
+                   0.75, 0.90, 0.95, 0.99), na.rm = TRUE)
+```
+
+
+\newpage
+
+# Create your CV/Resume here in *R* markdown
