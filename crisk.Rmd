@@ -1,0 +1,1845 @@
+---
+title: "Credit Risk Analysis"
+author: "Suresh L. Paul"
+date: "`r Sys.Date()`"
+output: 
+  pdf_document:
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Research question
+
+
+*Explain the research question. Be concise and explain what your project is about.*
+
+
+
+
+In this project, I investigate the relationship between certain key loan characteristics in two credit risk datasets. The first dataset (*crisk*) is a smaller dataset (approximately 35,000 observations) whereas the second dataset (*credit_risk*) is larger simulated dataset (800,000 observations). I establish the relationship between Loan Grade (*loan_grade*) and (i) Loan Interest (*loan_int_rate*), (ii) Personal Income (*person_income*), and (iii) the ratio of Loan Amount to the Personal Income (*loan_percent_income*). Further, I also investigate the relationship between Prior default Status (*cb_person_default_on_file*) and Loan Interest Rate (*loan_int_rate*) sliced across the categories of Loan Grade (*loan_grade*), Home Ownership (*person_home_ownership*), and Loan Intent (*loan_intent*).
+
+
+
+
+# Data analysis
+
+
+The smaller dataset (*crisk*) is directly downloaded from the source website. The larger dataset (*credit_risk*) is assimilated by appending three separate datasets - (*credit_risk1*),  (*credit_risk2*), and (*credit_risk3*) respectively. The description of variables are as follows: *loan_number* is a unique loan identifier, *person_age* gives the age of the loan recipient, *person_income* is the income of the loan recipient in US dollars, *person_home_ownership* denotes the home ownership status of the loan recipient (i.e., RENT, OWN, MORTGAGE, OTHER), *person_emp_length* length of employment of the loan recipient in months, *loan_intent* provides the purpose of the loan (PERSONAL, EDUCATION, MEDICAL, VENTURE, HOME IMPROVEMENT, and DEBT CONSOLIDATION), *loan_grade* gives the credit rating/grade of loan (i.e., A, B, C, D, E, F, and G), *loan_amnt* is the total loan amount in US dollars, *loan_int_rate* is the effective loan interest rate, *loan_status* is the status of the current loan (0 is active, 1 is default), *cb_person_default_on_file* is indicator that mentions whether the loan recipient has defaulted on a loan previously (Yes/No), *cb_person_cred_hist_length* is the length of credit history, and finally *loan_percent_income* is the total loan amount as a percentage of income.
+
+
+
+
+## Exploratory data analysis
+
+
+
+This subsection documents the initial diagnostic evaluation of all datasets.
+
+
+
+### Loading Libraries
+
+
+First, I start with installing and loading all required *R* libraries. They include,
+
+-   *data.table()*
+-   *tidyverse()*, which includes *ggplot2()* and *dplyr()*
+-   *tidyquant()*
+-   *janitor()*
+-   *plotly()*
+-   *gganimate()*
+-   *gifski()*
+-   *patchwork()*
+
+Also, the path to datasets, namely *gitpath* and *dirpath*, are initialized.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# load all libraries ...
+
+library(data.table)
+library(tidyverse)
+library(tidyquant)
+library(plotly)
+library(janitor)
+library(gganimate)
+library(gifski)
+library(patchwork)
+
+#-------------------------------------------------------------------------------
+# initialize path to files ...
+#-------------------------------------------------------------------------------
+
+
+# Github branch path
+gitpath <- "https://raw.githubusercontent.com/sureshlazaruspaul/"
+
+# Github path to files
+dirpath <- "/BUS662-practice-datasets/main/credit-risk/"
+```
+
+
+
+
+
+### Importing strategy and Descriptive Summary
+
+
+
+All datasets are imported using the *fread()* function from the *data.table* library package and imported from online sources.
+
+
+#### Import
+
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+#-------------------------------------------------------------------------------
+# Credit Risk 
+# - sample 1: small dataset
+#-------------------------------------------------------------------------------
+
+crisk <- fread(paste0(gitpath, dirpath, "crisk.csv"))
+
+#-------------------------------------------------------------------------------
+# Credit Risk 
+# - sample 2: large dataset
+#-------------------------------------------------------------------------------
+
+# read first csv file ...
+credit_risk1 <- fread(paste0(gitpath, dirpath, "credit_risk1.csv"))
+credit_risk2 <- fread(paste0(gitpath, dirpath, "credit_risk2.csv"))
+credit_risk3 <- fread(paste0(gitpath, dirpath, "credit_risk3.csv"))
+
+# create an empty dataframe
+credit_risk = data.frame()
+
+# use rbind() to append the imported data to the empty dataframe
+credit_risk <- rbind(credit_risk, credit_risk1)
+credit_risk <- rbind(credit_risk, credit_risk2)
+credit_risk <- rbind(credit_risk, credit_risk3)
+
+#remove credit_risk1 and credit_risk2
+rm("credit_risk1", "credit_risk2", "credit_risk3")
+```
+
+
+#### Describe
+
+
+-   *head()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(crisk)
+```
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+head(credit_risk)
+```
+
+
+-   *tail()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(crisk)
+```
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+tail(credit_risk)
+```
+
+-   *glimpse()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(crisk)
+```
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+glimpse(credit_risk)
+```
+
+-   *str()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(crisk)
+```
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+str(credit_risk)
+```
+
+-   *class()*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(crisk)
+```
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+class(credit_risk)
+```
+
+
+
+#### Descriptive plots - histogram()
+
+
+
+
+-   small dataset *crisk*
+  -   variable: *person_age*
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- crisk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,100) +
+  labs(
+    title = "Distribution of Age",
+    subtitle = "Sample: Smaller sample",
+    caption = paste("N =", nrow(crisk)),
+    x = "Age",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=person_age
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_1  <- round(min(crisk$person_age, na.rm = TRUE), digits = 0)
+max_1  <- round(max(crisk$person_age, na.rm = TRUE), digits = 0)
+mean_1 <- round(mean(crisk$person_age, na.rm = TRUE), digits = 0)
+sd_1   <- round(sd(crisk$person_age, na.rm = TRUE), digits = 0)
+p1_1  <- round(quantile(crisk$person_age, probs = c(0.01), na.rm = TRUE), digits = 0)
+p5_1  <- round(quantile(crisk$person_age, probs = c(0.05), na.rm = TRUE), digits = 0)
+p10_1 <- round(quantile(crisk$person_age, probs = c(0.10), na.rm = TRUE), digits = 0)
+q1_1  <- round(quantile(crisk$person_age, probs = c(0.25), na.rm = TRUE), digits = 0)
+q2_1  <- round(quantile(crisk$person_age, probs = c(0.50), na.rm = TRUE), digits = 0)
+q3_1  <- round(quantile(crisk$person_age, probs = c(0.75), na.rm = TRUE), digits = 0)
+p90_1 <- round(quantile(crisk$person_age, probs = c(0.90), na.rm = TRUE), digits = 0)
+p95_1 <- round(quantile(crisk$person_age, probs = c(0.95), na.rm = TRUE), digits = 0)
+p99_1 <- round(quantile(crisk$person_age, probs = c(0.99), na.rm = TRUE), digits = 0)
+```
+
+***
+
+
+| Statistic | Value                |
+|-----------|---------------------:|
+| Min       | `r min_1`            |
+| P1        | `r p1_1`             |
+| P5        | `r p5_1`             |
+| P10       | `r p10_1`            |
+| Q1 = P25  | `r q1_1`             |
+| Mean      | `r mean_1`           |
+| Median    | `r q2_1`             |
+| Q3 = P75  | `r q3_1`             |
+| P90       | `r p90_1`            |
+| P95       | `r p95_1`            |
+| P99       | `r p99_1`            |
+| Max       | `r max_1`            |
+| Std. Dev  | `r sd_1`             |
+
+***
+
+
+
+-   large dataset *credit_risk*
+  -   variable: *person_age*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- credit_risk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,100) +
+  labs(
+    title = "Distribution of Age",
+    subtitle = "Sample: Larger sample",
+    caption = paste("N =", nrow(credit_risk)),
+    x = "Age",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=person_age
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_2  <- round(min(credit_risk$person_age, na.rm = TRUE), digits = 0)
+max_2  <- round(max(credit_risk$person_age, na.rm = TRUE), digits = 0)
+mean_2 <- round(mean(credit_risk$person_age, na.rm = TRUE), digits = 0)
+sd_2   <- round(sd(credit_risk$person_age, na.rm = TRUE), digits = 0)
+p1_2  <- round(quantile(credit_risk$person_age, probs = c(0.01), na.rm = TRUE), digits = 0)
+p5_2  <- round(quantile(credit_risk$person_age, probs = c(0.05), na.rm = TRUE), digits = 0)
+p10_2 <- round(quantile(credit_risk$person_age, probs = c(0.10), na.rm = TRUE), digits = 0)
+q1_2  <- round(quantile(credit_risk$person_age, probs = c(0.25), na.rm = TRUE), digits = 0)
+q2_2  <- round(quantile(credit_risk$person_age, probs = c(0.50), na.rm = TRUE), digits = 0)
+q3_2  <- round(quantile(credit_risk$person_age, probs = c(0.75), na.rm = TRUE), digits = 0)
+p90_2 <- round(quantile(credit_risk$person_age, probs = c(0.90), na.rm = TRUE), digits = 0)
+p95_2 <- round(quantile(credit_risk$person_age, probs = c(0.95), na.rm = TRUE), digits = 0)
+p99_2 <- round(quantile(credit_risk$person_age, probs = c(0.99), na.rm = TRUE), digits = 0)
+```
+
+***
+  
+  
+| Statistic | Value                |
+|-----------|---------------------:|
+| Min       | `r min_2`            |
+| P1        | `r p1_2`             |
+| P5        | `r p5_2`             |
+| P10       | `r p10_2`            |
+| Q1 = P25  | `r q1_2`             |
+| Mean      | `r mean_2`           |
+| Median    | `r q2_2`             |
+| Q3 = P75  | `r q3_2`             |
+| P90       | `r p90_2`            |
+| P95       | `r p95_2`            |
+| P99       | `r p99_2`            |
+| Max       | `r max_2`            |
+| Std. Dev  | `r sd_2`             |
+  
+***
+  
+
+
+-   small dataset *crisk*
+    -   variable: *person_income*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- crisk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,100000) +
+  labs(
+    title = "Distribution of Income",
+    subtitle = "Sample: Smaller sample",
+    caption = paste("N =", nrow(crisk)),
+    x = "Income",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=person_income
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_4  <- round(min(crisk$person_income, na.rm = TRUE), digits = 0)
+max_4  <- round(max(crisk$person_income, na.rm = TRUE), digits = 0)
+mean_4 <- round(mean(crisk$person_income, na.rm = TRUE), digits = 0)
+sd_4   <- round(sd(crisk$person_income, na.rm = TRUE), digits = 0)
+p1_4  <- round(quantile(crisk$person_income, probs = c(0.01), na.rm = TRUE), digits = 0)
+p5_4  <- round(quantile(crisk$person_income, probs = c(0.05), na.rm = TRUE), digits = 0)
+p10_4 <- round(quantile(crisk$person_income, probs = c(0.10), na.rm = TRUE), digits = 0)
+q1_4  <- round(quantile(crisk$person_income, probs = c(0.25), na.rm = TRUE), digits = 0)
+q2_4  <- round(quantile(crisk$person_income, probs = c(0.50), na.rm = TRUE), digits = 0)
+q3_4  <- round(quantile(crisk$person_income, probs = c(0.75), na.rm = TRUE), digits = 0)
+p90_4 <- round(quantile(crisk$person_income, probs = c(0.90), na.rm = TRUE), digits = 0)
+p95_4 <- round(quantile(crisk$person_income, probs = c(0.95), na.rm = TRUE), digits = 0)
+p99_4 <- round(quantile(crisk$person_income, probs = c(0.99), na.rm = TRUE), digits = 0)
+```
+
+***
+
+
+| Statistic | Value                |
+|-----------|---------------------:|
+| Min       | `r min_4`            |
+| P1        | `r p1_4`             |
+| P5        | `r p5_4`             |
+| P10       | `r p10_4`            |
+| Q1 = P25  | `r q1_4`             |
+| Mean      | `r mean_4`           |
+| Median    | `r q2_4`             |
+| Q3 = P75  | `r q3_4`             |
+| P90       | `r p90_4`            |
+| P95       | `r p95_4`            |
+| P99       | `r p99_4`            |
+| Max       | `r max_4`            |
+| Std. Dev  | `r sd_4`             |
+  
+***
+
+
+
+-   large dataset *credit_risk*
+    -   variable: *person_income*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- credit_risk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,100000) +
+  labs(
+    title = "Distribution of Income",
+    subtitle = "Sample: Larger sample",
+    caption = paste("N =", nrow(credit_risk)),
+    x = "Income",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=person_income
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_3  <- round(min(credit_risk$person_income, na.rm = TRUE), digits = 0)
+max_3  <- round(max(credit_risk$person_income, na.rm = TRUE), digits = 0)
+mean_3 <- round(mean(credit_risk$person_income, na.rm = TRUE), digits = 0)
+sd_3   <- round(sd(credit_risk$person_income, na.rm = TRUE), digits = 0)
+p1_3  <- round(quantile(credit_risk$person_income, probs = c(0.01), na.rm = TRUE), digits = 0)
+p5_3  <- round(quantile(credit_risk$person_income, probs = c(0.05), na.rm = TRUE), digits = 0)
+p10_3 <- round(quantile(credit_risk$person_income, probs = c(0.10), na.rm = TRUE), digits = 0)
+q1_3  <- round(quantile(credit_risk$person_income, probs = c(0.25), na.rm = TRUE), digits = 0)
+q2_3  <- round(quantile(credit_risk$person_income, probs = c(0.50), na.rm = TRUE), digits = 0)
+q3_3  <- round(quantile(credit_risk$person_income, probs = c(0.75), na.rm = TRUE), digits = 0)
+p90_3 <- round(quantile(credit_risk$person_income, probs = c(0.90), na.rm = TRUE), digits = 0)
+p95_3 <- round(quantile(credit_risk$person_income, probs = c(0.95), na.rm = TRUE), digits = 0)
+p99_3 <- round(quantile(credit_risk$person_income, probs = c(0.99), na.rm = TRUE), digits = 0)
+```
+
+***
+
+
+| Statistic | Value                |
+|-----------|---------------------:|
+| Min       | `r min_3`            |
+| P1        | `r p1_3`             |
+| P5        | `r p5_3`             |
+| P10       | `r p10_3`            |
+| Q1 = P25  | `r q1_3`             |
+| Mean      | `r mean_3`           |
+| Median    | `r q2_3`             |
+| Q3 = P75  | `r q3_3`             |
+| P90       | `r p90_3`            |
+| P95       | `r p95_3`            |
+| P99       | `r p99_3`            |
+| Max       | `r max_3`            |
+| Std. Dev  | `r sd_3`             |
+  
+***
+
+
+
+-   small dataset *crisk*
+    -   variable: *person_home_ownership*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- crisk %>%
+  ggplot(
+    aes(
+      x=person_home_ownership,
+      fill=person_home_ownership
+    )
+  ) +
+  geom_text(stat = "count",
+            aes(label = ..count..),
+            vjust = -0.15) +
+  theme_classic() +
+  labs(
+    title = "Distribution of Home Ownership",
+    subtitle = "Sample: Smaller sample",
+    caption = paste("N =", nrow(crisk)),
+    x = "Home Ownership",
+    y = "Frequency"
+  )
+
+# plot
+canvas + geom_bar()
+```
+
+
+-   large dataset *credit_risk*
+    -   variable: *person_home_ownership*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- credit_risk %>%
+  ggplot(
+    aes(
+      x=person_home_ownership,
+      fill=person_home_ownership
+    )
+  ) +
+  geom_text(stat = "count",
+            aes(label = ..count..),
+            vjust = -0.15) +
+  theme_classic() +
+  labs(
+    title = "Distribution of Home Ownership",
+    subtitle = "Sample: Larger sample",
+    caption = paste("N =", nrow(credit_risk)),
+    x = "Home Ownership",
+    y = "Frequency"
+  )
+
+# plot
+canvas + geom_bar()
+```
+
+
+-   small dataset *crisk*
+  -   variable: *person_emp_length*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- crisk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,100) +
+  labs(
+    title = "Distribution of Employment Length",
+    subtitle = "Sample: Smaller sample",
+    caption = paste("N =", nrow(crisk)),
+    x = "Employment Length",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=person_emp_length
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_5  <- round(min(crisk$person_emp_length, na.rm = TRUE), digits = 0)
+max_5  <- round(max(crisk$person_emp_length, na.rm = TRUE), digits = 0)
+mean_5 <- round(mean(crisk$person_emp_length, na.rm = TRUE), digits = 0)
+sd_5   <- round(sd(crisk$person_emp_length, na.rm = TRUE), digits = 0)
+p1_5  <- round(quantile(crisk$person_emp_length, probs = c(0.01), na.rm = TRUE), digits = 0)
+p5_5  <- round(quantile(crisk$person_emp_length, probs = c(0.05), na.rm = TRUE), digits = 0)
+p10_5 <- round(quantile(crisk$person_emp_length, probs = c(0.10), na.rm = TRUE), digits = 0)
+q1_5  <- round(quantile(crisk$person_emp_length, probs = c(0.25), na.rm = TRUE), digits = 0)
+q2_5  <- round(quantile(crisk$person_emp_length, probs = c(0.50), na.rm = TRUE), digits = 0)
+q3_5  <- round(quantile(crisk$person_emp_length, probs = c(0.75), na.rm = TRUE), digits = 0)
+p90_5 <- round(quantile(crisk$person_emp_length, probs = c(0.90), na.rm = TRUE), digits = 0)
+p95_5 <- round(quantile(crisk$person_emp_length, probs = c(0.95), na.rm = TRUE), digits = 0)
+p99_5 <- round(quantile(crisk$person_emp_length, probs = c(0.99), na.rm = TRUE), digits = 0)
+```
+
+***
+
+
+| Statistic | Value                |
+|-----------|---------------------:|
+| Min       | `r min_5`            |
+| P1        | `r p1_5`             |
+| P5        | `r p5_5`             |
+| P10       | `r p10_5`            |
+| Q1 = P25  | `r q1_5`             |
+| Mean      | `r mean_5`           |
+| Median    | `r q2_5`             |
+| Q3 = P75  | `r q3_5`             |
+| P90       | `r p90_5`            |
+| P95       | `r p95_5`            |
+| P99       | `r p99_5`            |
+| Max       | `r max_5`            |
+| Std. Dev  | `r sd_5`             |
+  
+***
+
+
+-   large dataset *credit_risk*
+  -   variable: *person_emp_length*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- credit_risk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,100) +
+  labs(
+    title = "Distribution of Employment Length",
+    subtitle = "Sample: Larger sample",
+    caption = paste("N =", nrow(credit_risk)),
+    x = "Employment Length",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=person_emp_length
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_6  <- round(min(credit_risk$person_emp_length, na.rm = TRUE), digits = 0)
+max_6  <- round(max(credit_risk$person_emp_length, na.rm = TRUE), digits = 0)
+mean_6 <- round(mean(credit_risk$person_emp_length, na.rm = TRUE), digits = 0)
+sd_6   <- round(sd(credit_risk$person_emp_length, na.rm = TRUE), digits = 0)
+p1_6  <- round(quantile(credit_risk$person_emp_length, probs = c(0.01), na.rm = TRUE), digits = 0)
+p5_6  <- round(quantile(credit_risk$person_emp_length, probs = c(0.05), na.rm = TRUE), digits = 0)
+p10_6 <- round(quantile(credit_risk$person_emp_length, probs = c(0.10), na.rm = TRUE), digits = 0)
+q1_6  <- round(quantile(credit_risk$person_emp_length, probs = c(0.25), na.rm = TRUE), digits = 0)
+q2_6  <- round(quantile(credit_risk$person_emp_length, probs = c(0.50), na.rm = TRUE), digits = 0)
+q3_6  <- round(quantile(credit_risk$person_emp_length, probs = c(0.75), na.rm = TRUE), digits = 0)
+p90_6 <- round(quantile(credit_risk$person_emp_length, probs = c(0.90), na.rm = TRUE), digits = 0)
+p95_6 <- round(quantile(credit_risk$person_emp_length, probs = c(0.95), na.rm = TRUE), digits = 0)
+p99_6 <- round(quantile(credit_risk$person_emp_length, probs = c(0.99), na.rm = TRUE), digits = 0)
+```
+
+***
+
+
+| Statistic | Value                |
+|-----------|---------------------:|
+| Min       | `r min_6`            |
+| P1        | `r p1_6`             |
+| P5        | `r p5_6`             |
+| P10       | `r p10_6`            |
+| Q1 = P25  | `r q1_6`             |
+| Mean      | `r mean_6`           |
+| Median    | `r q2_6`             |
+| Q3 = P75  | `r q3_6`             |
+| P90       | `r p90_6`            |
+| P95       | `r p95_6`            |
+| P99       | `r p99_6`            |
+| Max       | `r max_6`            |
+| Std. Dev  | `r sd_6`             |
+  
+***
+
+
+-   small dataset *crisk*
+  -   variable: *loan_intent*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- crisk %>%
+  ggplot(
+    aes(
+      x=loan_intent,
+      fill=loan_intent
+    )
+  ) +
+  geom_text(stat = "count",
+            aes(label = ..count..),
+            vjust = -0.15) +
+  theme_classic() +
+  labs(
+    title = "Distribution of Loan Intent",
+    subtitle = "Sample: Smaller sample",
+    caption = paste("N =", nrow(crisk)),
+    x = "Loan Intent",
+    y = "Frequency"
+  )
+
+# plot
+canvas + geom_bar()
+```
+
+
+-   large dataset *credit_risk*
+  -   variable: *loan_intent*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- credit_risk %>%
+  ggplot(
+    aes(
+      x=loan_intent,
+      fill=loan_intent
+    )
+  ) +
+  geom_text(stat = "count",
+            aes(label = ..count..),
+            vjust = -0.15) +
+  theme_classic() +
+  labs(
+    title = "Distribution of Loan Intent",
+    subtitle = "Sample: Larger sample",
+    caption = paste("N =", nrow(credit_risk)),
+    x = "Loan Intent",
+    y = "Frequency"
+  )
+
+# plot
+canvas + geom_bar()
+```
+
+
+
+-   small dataset *crisk*
+  -   variable: *loan_grade*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- crisk %>%
+  ggplot(
+    aes(
+      x=loan_grade,
+      fill=loan_grade
+    )
+  ) +
+  geom_text(stat = "count",
+            aes(label = ..count..),
+            vjust = -0.15) +
+  theme_classic() +
+  labs(
+    title = "Distribution of Loan Grade",
+    subtitle = "Sample: Smaller sample",
+    caption = paste("N =", nrow(crisk)),
+    x = "Loan Grade",
+    y = "Frequency"
+  )
+
+# plot
+canvas + geom_bar()
+```
+
+
+-   large dataset *credit_risk*
+  -   variable: *loan_grade*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- credit_risk %>%
+  ggplot(
+    aes(
+      x=loan_grade,
+      fill=loan_grade
+    )
+  ) +
+  geom_text(stat = "count",
+            aes(label = ..count..),
+            vjust = -0.15) +
+  theme_classic() +
+  labs(
+    title = "Distribution of Loan Grade",
+    subtitle = "Sample: Larger sample",
+    caption = paste("N =", nrow(credit_risk)),
+    x = "Loan Grade",
+    y = "Frequency"
+  )
+
+# plot
+canvas + geom_bar()
+```
+
+
+
+-   small dataset *crisk*
+  -   variable: *loan_status*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- crisk %>%
+  ggplot(
+    aes(
+      x=as.factor(loan_status),
+      fill=loan_status
+    )
+  ) +
+  geom_text(stat = "count",
+            aes(label = ..count..),
+            vjust = -0.15) +
+  theme_classic() +
+  labs(
+    title = "Distribution of Loan Status",
+    subtitle = "Sample: Smaller sample",
+    caption = paste("N =", nrow(crisk)),
+    x = "Loan Status",
+    y = "Frequency"
+  )
+
+# plot
+canvas + geom_bar()
+```
+
+
+-   large dataset *credit_risk*
+  -   variable: *loan_status*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- credit_risk %>%
+  ggplot(
+    aes(
+      x=as.factor(loan_status),
+      fill=loan_status
+    )
+  ) +
+  geom_text(stat = "count",
+            aes(label = ..count..),
+            vjust = -0.15) +
+  theme_classic() +
+  labs(
+    title = "Distribution of Loan Status",
+    subtitle = "Sample: Larger sample",
+    caption = paste("N =", nrow(credit_risk)),
+    x = "Loan Status",
+    y = "Frequency"
+  )
+
+# plot
+canvas + geom_bar()
+```
+
+
+
+-   small dataset *crisk*
+  -   variable: *loan_amnt*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- crisk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,100) +
+  labs(
+    title = "Distribution of Loan Amount",
+    subtitle = "Sample: Smaller sample",
+    caption = paste("N =", nrow(crisk)),
+    x = "Loan Amount",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=loan_amnt
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_8  <- round(min(crisk$loan_amnt, na.rm = TRUE), digits = 0)
+max_8  <- round(max(crisk$loan_amnt, na.rm = TRUE), digits = 0)
+mean_8 <- round(mean(crisk$loan_amnt, na.rm = TRUE), digits = 0)
+sd_8   <- round(sd(crisk$loan_amnt, na.rm = TRUE), digits = 0)
+p1_8  <- round(quantile(crisk$loan_amnt, probs = c(0.01), na.rm = TRUE), digits = 0)
+p5_8  <- round(quantile(crisk$loan_amnt, probs = c(0.05), na.rm = TRUE), digits = 0)
+p10_8 <- round(quantile(crisk$loan_amnt, probs = c(0.10), na.rm = TRUE), digits = 0)
+q1_8  <- round(quantile(crisk$loan_amnt, probs = c(0.25), na.rm = TRUE), digits = 0)
+q2_8  <- round(quantile(crisk$loan_amnt, probs = c(0.50), na.rm = TRUE), digits = 0)
+q3_8  <- round(quantile(crisk$loan_amnt, probs = c(0.75), na.rm = TRUE), digits = 0)
+p90_8 <- round(quantile(crisk$loan_amnt, probs = c(0.90), na.rm = TRUE), digits = 0)
+p95_8 <- round(quantile(crisk$loan_amnt, probs = c(0.95), na.rm = TRUE), digits = 0)
+p99_8 <- round(quantile(crisk$loan_amnt, probs = c(0.99), na.rm = TRUE), digits = 0)
+```
+
+***
+
+
+| Statistic | Value                |
+|-----------|---------------------:|
+| Min       | `r min_8`            |
+| P1        | `r p1_8`             |
+| P5        | `r p5_8`             |
+| P10       | `r p10_8`            |
+| Q1 = P25  | `r q1_8`             |
+| Mean      | `r mean_8`           |
+| Median    | `r q2_8`             |
+| Q3 = P75  | `r q3_8`             |
+| P90       | `r p90_8`            |
+| P95       | `r p95_8`            |
+| P99       | `r p99_8`            |
+| Max       | `r max_8`            |
+| Std. Dev  | `r sd_8`             |
+  
+***
+  
+
+-   large dataset *credit_risk*
+  -   variable: *loan_amnt*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- credit_risk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,100) +
+  labs(
+    title = "Distribution of Loan Amount",
+    subtitle = "Sample: Larger sample",
+    caption = paste("N =", nrow(credit_risk)),
+    x = "Loan Amount",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=loan_amnt
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_7  <- round(min(credit_risk$loan_amnt, na.rm = TRUE), digits = 0)
+max_7  <- round(max(credit_risk$loan_amnt, na.rm = TRUE), digits = 0)
+mean_7 <- round(mean(credit_risk$loan_amnt, na.rm = TRUE), digits = 0)
+sd_7   <- round(sd(credit_risk$loan_amnt, na.rm = TRUE), digits = 0)
+p1_7  <- round(quantile(credit_risk$loan_amnt, probs = c(0.01), na.rm = TRUE), digits = 0)
+p5_7  <- round(quantile(credit_risk$loan_amnt, probs = c(0.05), na.rm = TRUE), digits = 0)
+p10_7 <- round(quantile(credit_risk$loan_amnt, probs = c(0.10), na.rm = TRUE), digits = 0)
+q1_7  <- round(quantile(credit_risk$loan_amnt, probs = c(0.25), na.rm = TRUE), digits = 0)
+q2_7  <- round(quantile(credit_risk$loan_amnt, probs = c(0.50), na.rm = TRUE), digits = 0)
+q3_7  <- round(quantile(credit_risk$loan_amnt, probs = c(0.75), na.rm = TRUE), digits = 0)
+p90_7 <- round(quantile(credit_risk$loan_amnt, probs = c(0.90), na.rm = TRUE), digits = 0)
+p95_7 <- round(quantile(credit_risk$loan_amnt, probs = c(0.95), na.rm = TRUE), digits = 0)
+p99_7 <- round(quantile(credit_risk$loan_amnt, probs = c(0.99), na.rm = TRUE), digits = 0)
+```
+
+***
+
+
+| Statistic | Value                |
+|-----------|---------------------:|
+| Min       | `r min_7`            |
+| P1        | `r p1_7`             |
+| P5        | `r p5_7`             |
+| P10       | `r p10_7`            |
+| Q1 = P25  | `r q1_7`             |
+| Mean      | `r mean_7`           |
+| Median    | `r q2_7`             |
+| Q3 = P75  | `r q3_7`             |
+| P90       | `r p90_7`            |
+| P95       | `r p95_7`            |
+| P99       | `r p99_7`            |
+| Max       | `r max_7`            |
+| Std. Dev  | `r sd_7`             |
+  
+***
+  
+
+
+-   small dataset *crisk*
+  -   variable: *cb_person_default_on_file*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- crisk %>%
+  ggplot(
+    aes(
+      x=cb_person_default_on_file,
+      fill=cb_person_default_on_file
+    )
+  ) +
+  geom_text(stat = "count",
+            aes(label = ..count..),
+            vjust = -0.15) +
+  theme_classic() +
+  labs(
+    title = "Distribution of Prior Default Status",
+    subtitle = "Sample: Smaller sample",
+    caption = paste("N =", nrow(crisk)),
+    x = "Prior Default Status",
+    y = "Frequency"
+  )
+
+# plot
+canvas + geom_bar()
+```
+
+
+-   large dataset *credit_risk*
+  -   variable: *cb_person_default_on_file*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- credit_risk %>%
+  ggplot(
+    aes(
+      x=cb_person_default_on_file,
+      fill=cb_person_default_on_file
+    )
+  ) +
+  geom_text(stat = "count",
+            aes(label = ..count..),
+            vjust = -0.15) +
+  theme_classic() +
+  labs(
+    title = "Distribution of Prior Default Status",
+    subtitle = "Sample: Larger sample",
+    caption = paste("N =", nrow(credit_risk)),
+    x = "Prior Default Status",
+    y = "Frequency"
+  )
+
+# plot
+canvas + geom_bar()
+```
+
+
+
+-   small dataset *crisk*
+  -   variable: *cb_person_cred_hist_length*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- crisk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,100) +
+  labs(
+    title = "Distribution of Length of Credit History",
+    subtitle = "Sample: Smaller sample",
+    caption = paste("N =", nrow(crisk)),
+    x = "Length of Credit History",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=cb_person_cred_hist_length
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_9  <- round(min(crisk$cb_person_cred_hist_length, na.rm = TRUE), digits = 0)
+max_9  <- round(max(crisk$cb_person_cred_hist_length, na.rm = TRUE), digits = 0)
+mean_9 <- round(mean(crisk$cb_person_cred_hist_length, na.rm = TRUE), digits = 0)
+sd_9   <- round(sd(crisk$cb_person_cred_hist_length, na.rm = TRUE), digits = 0)
+p1_9  <- round(quantile(crisk$cb_person_cred_hist_length, probs = c(0.01), na.rm = TRUE), digits = 0)
+p5_9  <- round(quantile(crisk$cb_person_cred_hist_length, probs = c(0.05), na.rm = TRUE), digits = 0)
+p10_9 <- round(quantile(crisk$cb_person_cred_hist_length, probs = c(0.10), na.rm = TRUE), digits = 0)
+q1_9  <- round(quantile(crisk$cb_person_cred_hist_length, probs = c(0.25), na.rm = TRUE), digits = 0)
+q2_9  <- round(quantile(crisk$cb_person_cred_hist_length, probs = c(0.50), na.rm = TRUE), digits = 0)
+q3_9  <- round(quantile(crisk$cb_person_cred_hist_length, probs = c(0.75), na.rm = TRUE), digits = 0)
+p90_9 <- round(quantile(crisk$cb_person_cred_hist_length, probs = c(0.90), na.rm = TRUE), digits = 0)
+p95_9 <- round(quantile(crisk$cb_person_cred_hist_length, probs = c(0.95), na.rm = TRUE), digits = 0)
+p99_9 <- round(quantile(crisk$cb_person_cred_hist_length, probs = c(0.99), na.rm = TRUE), digits = 0)
+```
+
+***
+
+
+| Statistic | Value                |
+|-----------|---------------------:|
+| Min       | `r min_9`            |
+| P1        | `r p1_9`             |
+| P5        | `r p5_9`             |
+| P10       | `r p10_9`            |
+| Q1 = P25  | `r q1_9`             |
+| Mean      | `r mean_9`           |
+| Median    | `r q2_9`             |
+| Q3 = P75  | `r q3_9`             |
+| P90       | `r p90_9`            |
+| P95       | `r p95_9`            |
+| P99       | `r p99_9`            |
+| Max       | `r max_9`            |
+| Std. Dev  | `r sd_9`             |
+  
+***
+
+
+-   large dataset *credit_risk*
+  -   variable: *cb_person_cred_hist_length*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- credit_risk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,100) +
+  labs(
+    title = "Distribution of Length of Credit History",
+    subtitle = "Sample: Larger sample",
+    caption = paste("N =", nrow(credit_risk)),
+    x = "Length of Credit History",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=cb_person_cred_hist_length
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_10  <- round(min(credit_risk$cb_person_cred_hist_length, na.rm = TRUE), digits = 0)
+max_10  <- round(max(credit_risk$cb_person_cred_hist_length, na.rm = TRUE), digits = 0)
+mean_10 <- round(mean(credit_risk$cb_person_cred_hist_length, na.rm = TRUE), digits = 0)
+sd_10   <- round(sd(credit_risk$cb_person_cred_hist_length, na.rm = TRUE), digits = 0)
+p1_10  <- round(quantile(credit_risk$cb_person_cred_hist_length, probs = c(0.01), na.rm = TRUE), digits = 0)
+p5_10  <- round(quantile(credit_risk$cb_person_cred_hist_length, probs = c(0.05), na.rm = TRUE), digits = 0)
+p10_10 <- round(quantile(credit_risk$cb_person_cred_hist_length, probs = c(0.10), na.rm = TRUE), digits = 0)
+q1_10  <- round(quantile(credit_risk$cb_person_cred_hist_length, probs = c(0.25), na.rm = TRUE), digits = 0)
+q2_10  <- round(quantile(credit_risk$cb_person_cred_hist_length, probs = c(0.50), na.rm = TRUE), digits = 0)
+q3_10  <- round(quantile(credit_risk$cb_person_cred_hist_length, probs = c(0.75), na.rm = TRUE), digits = 0)
+p90_10 <- round(quantile(credit_risk$cb_person_cred_hist_length, probs = c(0.90), na.rm = TRUE), digits = 0)
+p95_10 <- round(quantile(credit_risk$cb_person_cred_hist_length, probs = c(0.95), na.rm = TRUE), digits = 0)
+p99_10 <- round(quantile(credit_risk$cb_person_cred_hist_length, probs = c(0.99), na.rm = TRUE), digits = 0)
+```
+
+***
+
+
+| Statistic | Value                 |
+|-----------|----------------------:|
+| Min       | `r min_10`            |
+| P1        | `r p1_10`             |
+| P5        | `r p5_10`             |
+| P10       | `r p10_10`            |
+| Q1 = P25  | `r q1_10`             |
+| Mean      | `r mean_10`           |
+| Median    | `r q2_10`             |
+| Q3 = P75  | `r q3_10`             |
+| P90       | `r p90_10`            |
+| P95       | `r p95_10`            |
+| P99       | `r p99_10`            |
+| Max       | `r max_10`            |
+| Std. Dev  | `r sd_10`             |
+  
+***
+  
+
+
+-   small dataset *crisk*
+  -   variable: *loan_percent_income*
+  
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- crisk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,1) +
+  labs(
+    title = "Distribution of Percent Loan-to-Income",
+    subtitle = "Sample: Smaller sample",
+    caption = paste("N =", nrow(crisk)),
+    x = "Percent Loan-to-Income",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=loan_percent_income
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_12  <- round(min(crisk$loan_percent_income, na.rm = TRUE)*100, digits = 3)
+max_12  <- round(max(crisk$loan_percent_income, na.rm = TRUE)*100, digits = 3)
+mean_12 <- round(mean(crisk$loan_percent_income, na.rm = TRUE)*100, digits = 3)
+sd_12   <- round(sd(crisk$loan_percent_income, na.rm = TRUE)*100, digits = 3)
+p1_12  <- round(quantile(crisk$loan_percent_income, probs = c(0.01), na.rm = TRUE)*100, digits = 3)
+p5_12  <- round(quantile(crisk$loan_percent_income, probs = c(0.05), na.rm = TRUE)*100, digits = 3)
+p10_12 <- round(quantile(crisk$loan_percent_income, probs = c(0.10), na.rm = TRUE)*100, digits = 3)
+q1_12  <- round(quantile(crisk$loan_percent_income, probs = c(0.25), na.rm = TRUE)*100, digits = 3)
+q2_12  <- round(quantile(crisk$loan_percent_income, probs = c(0.50), na.rm = TRUE)*100, digits = 3)
+q3_12  <- round(quantile(crisk$loan_percent_income, probs = c(0.75), na.rm = TRUE)*100, digits = 3)
+p90_12 <- round(quantile(crisk$loan_percent_income, probs = c(0.90), na.rm = TRUE)*100, digits = 3)
+p95_12 <- round(quantile(crisk$loan_percent_income, probs = c(0.95), na.rm = TRUE)*100, digits = 3)
+p99_12 <- round(quantile(crisk$loan_percent_income, probs = c(0.99), na.rm = TRUE)*100, digits = 3)
+```
+
+***
+
+
+| Statistic | Value                 |
+|-----------|----------------------:|
+| Min       | `r min_12`            |
+| P1        | `r p1_12`             |
+| P5        | `r p5_12`             |
+| P10       | `r p10_12`            |
+| Q1 = P25  | `r q1_12`             |
+| Mean      | `r mean_12`           |
+| Median    | `r q2_12`             |
+| Q3 = P75  | `r q3_12`             |
+| P90       | `r p90_12`            |
+| P95       | `r p95_12`            |
+| P99       | `r p99_12`            |
+| Max       | `r max_12`            |
+| Std. Dev  | `r sd_12`             |
+  
+***
+  
+
+-   large dataset *credit_risk*
+  -   variable: *loan_percent_income*
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# canvas
+canvas <- credit_risk %>%
+  ggplot() +
+  theme_classic() +
+  xlim(0,1) +
+  labs(
+    title = "Distribution of Percent Loan-to-Income",
+    subtitle = "Sample: Larger sample",
+    caption = paste("N =", nrow(credit_risk)),
+    x = "Percent Loan-to-Income",
+    y = "Frequency"
+  )
+
+# plot
+canvas +
+  geom_histogram(
+    aes(
+      x=loan_percent_income
+    ),
+    bins = 100,
+    fill = "red"
+  )
+```
+
+
+
+```{r size="tiny"}
+#| echo: FALSE
+#| eval: TRUE
+
+min_11  <- round(min(credit_risk$loan_percent_income, na.rm = TRUE)*100, digits = 3)
+max_11  <- round(max(credit_risk$loan_percent_income, na.rm = TRUE)*100, digits = 3)
+mean_11 <- round(mean(credit_risk$loan_percent_income, na.rm = TRUE)*100, digits = 3)
+sd_11   <- round(sd(credit_risk$loan_percent_income, na.rm = TRUE)*100, digits = 3)
+p1_11  <- round(quantile(credit_risk$loan_percent_income, probs = c(0.01), na.rm = TRUE)*100, digits = 3)
+p5_11  <- round(quantile(credit_risk$loan_percent_income, probs = c(0.05), na.rm = TRUE)*100, digits = 3)
+p10_11 <- round(quantile(credit_risk$loan_percent_income, probs = c(0.10), na.rm = TRUE)*100, digits = 3)
+q1_11  <- round(quantile(credit_risk$loan_percent_income, probs = c(0.25), na.rm = TRUE)*100, digits = 3)
+q2_11  <- round(quantile(credit_risk$loan_percent_income, probs = c(0.50), na.rm = TRUE)*100, digits = 3)
+q3_11  <- round(quantile(credit_risk$loan_percent_income, probs = c(0.75), na.rm = TRUE)*100, digits = 3)
+p90_11 <- round(quantile(credit_risk$loan_percent_income, probs = c(0.90), na.rm = TRUE)*100, digits = 3)
+p95_11 <- round(quantile(credit_risk$loan_percent_income, probs = c(0.95), na.rm = TRUE)*100, digits = 3)
+p99_11 <- round(quantile(credit_risk$loan_percent_income, probs = c(0.99), na.rm = TRUE)*100, digits = 3)
+```
+
+***
+
+
+| Statistic | Value                 |
+|-----------|----------------------:|
+| Min       | `r min_11`            |
+| P1        | `r p1_11`             |
+| P5        | `r p5_11`             |
+| P10       | `r p10_11`            |
+| Q1 = P25  | `r q1_11`             |
+| Mean      | `r mean_11`           |
+| Median    | `r q2_11`             |
+| Q3 = P75  | `r q3_11`             |
+| P90       | `r p90_11`            |
+| P95       | `r p95_11`            |
+| P99       | `r p99_11`            |
+| Max       | `r max_11`            |
+| Std. Dev  | `r sd_11`             |
+  
+***
+
+
+
+
+## Empirical data analysis
+
+
+### Relationship between Loan Grade and Loan Interest
+
+
+Conventional wisdom would dictate that better interest rate would be reserved for better grade loans. The following plot gives the relationship between the loan grade and its corresponding loan interest rate offered.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# create canvas
+canvas <- crisk %>%
+  ggplot(
+    mapping = aes(
+      x = loan_grade,
+      y = loan_int_rate
+    )
+  ) +
+  theme_tq_green() +
+  labs(
+    title = "Loan Grade (vs) Loan Interest", 
+    subtitle = "",
+    caption = "Data: Smaller dataset",
+    x = "Loan Grade",
+    y = "Loan Interest %"
+  )
+
+# box plot with options ... 
+canvas + geom_boxplot(na.rm = TRUE, outlier.color = "magenta", 
+                      outlier.size = 0.5,
+                      outlier.alpha = 0.1) -> boxplot1
+
+boxplot1 + coord_flip() # flip x and y axis
+```
+
+
+From the plot, we observe that ...
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# create canvas
+canvasa <- credit_risk %>%
+  ggplot(
+    mapping = aes(
+      x = loan_grade,
+      y = loan_int_rate
+    )
+  ) +
+  theme_tq_green() +
+  labs(
+    title = "Loan Grade (vs) Loan Interest", 
+    subtitle = "",
+    caption = "Data: Larger dataset",
+    x = "Loan Grade",
+    y = "Loan Interest %"
+  )
+
+# box plot with options ... 
+canvasa + geom_boxplot(na.rm = TRUE, outlier.color = "magenta", 
+                      outlier.size = 0.5,
+                      outlier.alpha = 0.1) -> boxplot1a
+
+boxplot1a + coord_flip() # flip x and y axis
+```
+
+
+From the plot, we observe that ...
+
+
+### Relationship between Loan Grade and Personal Income
+
+It also plausible to assume that better grade of loans are reserved for high-earning individuals. Therefore, in the next plot, we investigate if personal income and loan grade are related.
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# create canvas
+canvas1 <- crisk %>%
+  ggplot(
+    mapping = aes(
+      x = loan_grade,
+      y = person_income
+    )
+  ) +
+  theme_tq_green() +
+  scale_y_continuous(limits = c(0, 100000)) +
+  labs(
+    title = "Loan Grade (vs) Personal Income", 
+    subtitle = "",
+    caption = "Data: Smaller dataset",
+    x = "Loan Grade",
+    y = "Personal Income"
+  )
+
+canvas1 +
+  geom_boxplot(na.rm = TRUE,
+               outlier.color = "magenta",
+               outlier.size = 0.5,
+               outlier.alpha = 0.1) -> boxplot2
+
+boxplot2 + coord_flip()
+```
+
+
+From the plot, we observe that ...
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# create canvas
+canvas1a <- credit_risk %>%
+  ggplot(
+    mapping = aes(
+      x = loan_grade,
+      y = person_income
+    )
+  ) +
+  theme_tq_green() +
+  scale_y_continuous(limits = c(0, 100000)) +
+  labs(
+    title = "Loan Grade (vs) Personal Income", 
+    subtitle = "",
+    caption = "Data: Larger dataset",
+    x = "Loan Grade",
+    y = "Personal Income"
+  )
+
+canvas1a +
+  geom_boxplot(na.rm = TRUE,
+               outlier.color = "magenta",
+               outlier.size = 0.5,
+               outlier.alpha = 0.1) -> boxplot2a
+
+boxplot2a + coord_flip()
+```
+
+
+From the plot, we observe that ...
+
+
+### Relationship between Loan Grade and Loan Amt/Personal Income
+
+
+Next, we investigate whether loan grade is related to the share of the loan amount to personal income. 
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# create canvas
+canvas2 <- crisk %>%
+  ggplot(
+    mapping = aes(
+      x = loan_grade,
+      y = loan_percent_income
+    )
+  ) +
+  theme_tq_green() +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(
+    title = "Loan Grade (vs) Loan Amt/Personal Income", 
+    subtitle = "",
+    caption = "Data: Smaller dataset",
+    x = "Loan Grade",
+    y = "Loan Amt/Personal Income"
+  )
+
+canvas2 +
+  geom_boxplot(na.rm = TRUE,
+               outlier.color = "magenta",
+               outlier.size = 0.5,
+               outlier.alpha = 0.1) -> boxplot3
+
+boxplot3 + coord_flip()
+```
+
+
+From the plot, we observe that ...
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# create canvas
+canvas2a <- credit_risk %>%
+  ggplot(
+    mapping = aes(
+      x = loan_grade,
+      y = loan_percent_income
+    )
+  ) +
+  theme_tq_green() +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(
+    title = "Loan Grade (vs) Loan Amt/Personal Income", 
+    subtitle = "",
+    caption = "Data: Larger dataset",
+    x = "Loan Grade",
+    y = "Loan Amt/Personal Income"
+  )
+
+
+canvas2a +
+  geom_boxplot(na.rm = TRUE,
+               outlier.color = "magenta",
+               outlier.size = 0.5,
+               outlier.alpha = 0.1) -> boxplot3a
+
+boxplot3a + coord_flip()
+```
+
+
+From the plot, we observe that ...
+
+
+
+
+
+### Relationship between Loan Grade, Prior default Status, and Loan Interest Rate
+
+
+Here, we analyze whether the relationship between Prior default Status and Loan Interest Rate vary by the quality of the loan offered (Loan Grade).
+
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# create canvas
+canvas4 <- crisk %>% ggplot(
+  mapping = aes(
+    x = cb_person_default_on_file,
+    y = loan_int_rate
+  )) +
+  theme_tq_green() +
+  labs(
+    title = "Prior default (vs) Loan Interest Rate", 
+    subtitle = "by Loan Grade",
+    caption = "Data: Smaller dataset",
+    x = "Prior default", y = "Loan Interest Rate"
+  )
+
+#-------------------------------------------------------------------------------
+# Prior Default Status on Loan Interest Rate by Loan Grade
+#-------------------------------------------------------------------------------
+
+canvas4 + geom_boxplot() + coord_flip() + 
+  facet_wrap(~crisk$loan_grade) # sep plots
+```
+
+
+From the plot, we observe that ...
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# create canvas
+canvas4a <- credit_risk %>% ggplot(
+  mapping = aes(
+    x = cb_person_default_on_file,
+    y = loan_int_rate
+    )
+  ) +
+  theme_tq_green() +
+  labs(
+    title = "Prior default (vs) Loan Interest Rate", 
+    subtitle = "by Loan Grade",
+    caption = "Data: Larger dataset",
+    x = "Prior default", y = "Loan Interest Rate"
+  )
+
+#-------------------------------------------------------------------------------
+# Prior Default Status on Loan Interest Rate by Loan Grade
+#-------------------------------------------------------------------------------
+
+canvas4a + geom_boxplot() + coord_flip() + 
+  facet_wrap(~credit_risk$loan_grade) # sep plots
+```
+
+
+From the plot, we observe that ...
+
+
+
+
+
+### Relationship between Home Ownership, Prior default Status, and Loan Interest Rate
+
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+
+#-------------------------------------------------------------------------------
+# Prior Default Status on Loan Interest Rate by Home Ownership
+#-------------------------------------------------------------------------------
+# create canvas
+canvas5 <- crisk %>% ggplot(
+  mapping = aes(
+    x = cb_person_default_on_file,
+    y = loan_int_rate
+  )) +
+  theme_tq_green() +
+  labs(
+    title = "Prior default (vs) Loan Interest Rate", 
+    subtitle = "by Home Ownership Status",
+    caption = "Data: Smaller dataset",
+    x = "Prior default", y = "Loan Interest Rate"
+  )
+
+canvas5 + geom_boxplot() + coord_flip() + 
+  facet_wrap(~crisk$person_home_ownership) # sep plots
+```
+
+
+From the plot, we observe that ...
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# create canvas
+canvas5 <- credit_risk %>% ggplot(
+  mapping = aes(
+    x = cb_person_default_on_file,
+    y = loan_int_rate
+  )) +
+  theme_tq_green() +
+  labs(
+    title = "Prior default (vs) Loan Interest Rate", 
+    subtitle = "by Home Ownership Status",
+    caption = "Data: Larger dataset",
+    x = "Prior default", y = "Loan Interest Rate"
+  )
+
+canvas5 + geom_boxplot() + coord_flip() + 
+  facet_wrap(~credit_risk$person_home_ownership) # sep plots
+```
+
+
+From the plot, we observe that ...
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Relationship between Loan Intent, Prior default Status, and Loan Interest Rate
+
+
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+
+#-------------------------------------------------------------------------------
+# Prior Default Status on Loan Interest Rate by Home Ownership
+#-------------------------------------------------------------------------------
+# create canvas
+canvas6 <- crisk %>% ggplot(
+  mapping = aes(
+    x = cb_person_default_on_file,
+    y = loan_int_rate
+  )) +
+  theme_tq_green() +
+  labs(
+    title = "Prior default (vs) Loan Interest Rate", 
+    subtitle = "by Loan Intent",
+    caption = "Data: Smaller dataset",
+    x = "Prior default", y = "Loan Interest Rate"
+  )
+
+canvas6 + geom_boxplot() + coord_flip() + 
+  facet_wrap(~crisk$loan_intent) # sep plots
+```
+
+
+From the plot, we observe that ...
+
+```{r size="tiny"}
+#| echo: TRUE
+#| eval: TRUE
+# create canvas
+canvas6 <- credit_risk %>% ggplot(
+  mapping = aes(
+    x = cb_person_default_on_file,
+    y = loan_int_rate
+  )) +
+  theme_tq_green() +
+  labs(
+    title = "Prior default (vs) Loan Interest Rate", 
+    subtitle = "by Loan Intent",
+    caption = "Data: Larger dataset",
+    x = "Prior default", y = "Loan Interest Rate"
+  )
+
+canvas6 + geom_boxplot() + coord_flip() + 
+  facet_wrap(~credit_risk$loan_intent) # sep plots
+```
+
+
+From the plot, we observe that ...
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
